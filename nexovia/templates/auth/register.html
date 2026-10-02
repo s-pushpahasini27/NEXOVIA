@@ -1,0 +1,33 @@
+{% extends "auth/_layout.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}Create account · Nexovia{% endblock %}
+{% block card %}
+<div>
+  <h1>Create your account</h1>
+  <p class="muted" style="margin-top:8px">Start learning with your AI study companion.</p>
+</div>
+<form class="auth-form" method="post" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="name">Name</label>
+    <input class="input {{ 'has-error' if errors.name }}" id="name" name="name" autocomplete="name" value="{{ form.name }}" required autofocus>
+    {% if errors.name %}<span class="field-error">{{ errors.name }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="email">Email</label>
+    <input class="input {{ 'has-error' if errors.email }}" id="email" name="email" type="email" autocomplete="email" placeholder="you@school.edu" value="{{ form.email }}" required>
+    {% if errors.email %}<span class="field-error">{{ errors.email }}</span>{% endif %}
+  </div>
+  <div class="field">
+    <label for="password">Password</label>
+    <div class="input-wrap">
+      <input class="input {{ 'has-error' if errors.password }}" id="password" name="password" type="password" autocomplete="new-password" required>
+      <button class="icon-btn" type="button" data-toggle-password="password" aria-label="Show password">{{ icon('eye') }}</button>
+    </div>
+    {% if errors.password %}<span class="field-error">{{ errors.password }}</span>{% endif %}
+  </div>
+  <label class="check"><input type="checkbox" name="remember" checked> Keep me signed in for 30 days</label>
+  <button class="btn btn-primary btn-block" type="submit">Create account</button>
+</form>
+<p class="auth-alt">Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a></p>
+{% endblock %}

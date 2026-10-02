@@ -1,0 +1,105 @@
+{% extends "app/_shell.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}Home · Nexovia{% endblock %}
+{% block styles %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+{% endblock %}
+{% block page %}
+<div class="dash" id="dash" data-csrf="{{ csrf_token() }}" data-has-active-plan="{{ 'true' if active_plan else 'false' }}">
+  <div class="dash-head">
+    <div>
+      <div class="dash-date" id="dash-date">{{ d.date_label }}</div>
+      <h1>Hi, {{ g.user['name'].split()[0] }}</h1>
+    </div>
+    <div class="dash-actions">
+      <button class="btn btn-primary" type="button" id="log-open" data-command="Log a study session">{{ icon('timer') }}Log session</button>
+      <a class="btn" href="{{ url_for('main.planner') }}">{{ icon('calendar') }}Open planner</a>
+      <button class="btn" type="button" id="tip-focus" data-command="Get an AI study tip">{{ icon('sparkles') }}AI tip</button>
+    </div>
+  </div>
+
+  <div class="grid-4">
+    <div class="card"><div class="stat-label">Study streak</div><div class="stat-value"><span id="st-streak">{{ d.stats.streak }}</span> <small id="st-streak-unit">{{ 'day' if d.stats.streak == 1 else 'days' }}</small></div></div>
+    <div class="card"><div class="stat-label">Today</div><div class="stat-value"><span id="st-today">{{ d.stats.today_minutes }}</span> <small>min</small></div></div>
+    <div class="card"><div class="stat-label">Last 7 days</div><div class="stat-value"><span id="st-week">{{ d.stats.week_minutes }}</span> <small>min</small></div></div>
+    <div class="card"><div class="stat-label">Tasks done</div><div class="stat-value"><span id="st-done">{{ d.stats.tasks_done }}</span><small> / <span id="st-total">{{ d.stats.tasks_total }}</span></small></div></div>
+  </div>
+
+  <div class="dash-cols">
+    <section class="card" aria-labelledby="plan-h">
+      <div class="card-head"><h2 id="plan-h">Today's plan</h2><a class="mono-sm" href="{{ url_for('main.planner') }}">View planner →</a></div>
+      {% if active_plan %}
+      <div class="home-active-plan"><span class="home-plan-label">ACTIVE STUDY PLAN · TODAY</span><strong>{{ active_plan.plan.title }}</strong><span>{{ today_plan_summary.completed }} of {{ today_plan_summary.total }} tasks done · {{ today_plan_summary.planned_minutes }} min planned · {{ today_plan_summary.actual_minutes }} min studied</span></div>
+      {% if today_plan_tasks %}
+      <ul class="home-plan-tasks">
+        {% for task in today_plan_tasks %}
+        <li><span><strong>{{ task.subject }} · {{ task.topic }}</strong><small>{{ task.planned_minutes }} min planned · {{ task.actual_minutes }} min studied</small></span><em>{{ task.status|replace('_', ' ')|title }}</em></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="empty">No study plan tasks scheduled for today.</p>{% endif %}
+      {% if d.tasks %}<p class="home-legacy-label">Other tasks</p>{% endif %}
+      {% endif %}
+      <ul class="task-list" id="task-list">
+        {% for t in d.tasks %}
+        <li class="task{{ ' done' if t.done }}" data-id="{{ t.id }}">
+          <button class="task-check" type="button" aria-pressed="{{ 'true' if t.done else 'false' }}" aria-label="Mark done">{{ icon('check') }}</button>
+          <span class="task-title">{{ t.title }}</span>
+          <button class="icon-btn task-del" type="button" aria-label="Delete task">{{ icon('trash') }}</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <template id="task-tpl">
+        <li class="task" data-id="">
+          <button class="task-check" type="button" aria-pressed="false" aria-label="Mark done">{{ icon('check') }}</button>
+          <span class="task-title"></span>
+          <button class="icon-btn task-del" type="button" aria-label="Delete task">{{ icon('trash') }}</button>
+        </li>
+      </template>
+      <p class="empty" id="task-empty" {% if d.tasks or active_plan %}hidden{% endif %}>Nothing planned yet. Create your first study plan in Planner.</p>
+    </section>
+
+    <section class="card" aria-labelledby="week-h">
+      <div class="card-head"><h2 id="week-h">This week</h2><span class="mono-sm">minutes studied</span></div>
+      <div class="week" id="week">
+        {% for day in d.week %}
+        <div class="week-col{{ ' today' if day.today }}" title="{{ day.label }}: {{ day.minutes }} min">
+          <span class="week-val">{{ day.minutes if day.minutes else '' }}</span>
+          <div class="week-track"><div class="week-bar" style="--h: {{ day.pct }}%"></div></div>
+          <span class="week-label">{{ day.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section class="card" data-testid="ai-tip" aria-labelledby="tip-h">
+    <div class="card-head"><h2 id="tip-h">AI study tip</h2><span class="mono-sm" id="tip-meta">via {{ tip.provider }} provider</span></div>
+    <p id="tip-text">{{ tip.text }}</p>
+    <p class="mono-sm">Based on your active plan, progress, priorities and deadlines. Add a topic only if you want to focus the tip.</p>
+    <form class="tip-form" id="tip-form" autocomplete="off">
+      <input class="input" id="tip-topic" maxlength="80" placeholder="Topic, e.g. organic chemistry" aria-label="Topic for a tip">
+      <button class="btn" type="submit">New tip</button>
+    </form>
+  </section>
+</div>
+
+<dialog class="modal" id="log-dialog" aria-labelledby="log-h">
+  <form id="log-form" autocomplete="off">
+    <h2 id="log-h">Log a study session</h2>
+    <div class="field"><label for="log-minutes">Minutes studied</label>
+      <input class="input" id="log-minutes" type="number" min="1" max="600" inputmode="numeric" placeholder="45" required></div>
+    <div class="field"><label for="log-topic">Topic <span class="muted">(optional)</span></label>
+      <input class="input" id="log-topic" maxlength="60" placeholder="Calculus: integrals"></div>
+    <p class="field-error" id="log-error" hidden></p>
+    <div class="modal-actions">
+      <button class="btn" type="button" id="log-cancel">Cancel</button>
+      <button class="btn btn-primary" type="submit">Save session</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

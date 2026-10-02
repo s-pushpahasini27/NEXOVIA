@@ -1,0 +1,5 @@
+Flask>=3.0,<4
+Werkzeug>=3.0,<4
+tzdata>=2026.1
+# Tooling (tests / browser pass only)
+playwright>=1.44

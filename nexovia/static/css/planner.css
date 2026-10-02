@@ -1,0 +1,72 @@
+.planner { display: grid; gap: var(--space-5); }
+.planner [hidden] { display: none !important; }
+.planner-head p { max-width: 52ch; }
+.active-plan-card { scroll-margin-top: calc(var(--topbar-h) + var(--space-4)); border-color: var(--border-strong); }
+.active-plan-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); flex-wrap: wrap; }
+.active-plan-badge { display: inline-block; margin-bottom: var(--space-2); font: 600 10px var(--font-mono); letter-spacing: .08em; color: var(--text); }
+.active-plan-head h2 { font-size: var(--fs-xl); }
+.active-plan-head p { margin-top: 4px; font-size: var(--fs-sm); color: var(--text-muted); }
+.active-plan-count { padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-full); color: var(--text-muted); font-size: var(--fs-xs); }
+.active-plan-metrics { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-4) 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.active-plan-metrics strong { color: var(--text); }
+.active-plan-list { border-top: 1px solid var(--border); }
+.active-plan-task { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+.active-plan-task > div { display: grid; gap: 4px; }
+.active-plan-task strong { font-size: var(--fs-sm); }
+.active-plan-task span { color: var(--text-muted); font-size: var(--fs-xs); }
+.active-task-status { white-space: nowrap; }
+.planner-kicker { margin-bottom: var(--space-2); font: 500 11px var(--font-mono); letter-spacing: .12em; color: var(--text-faint); }
+.planner-form { padding: 0; overflow: hidden; }
+.planner-section { padding: var(--space-5); }
+.planner-section + .planner-section { border-top: 1px solid var(--border); }
+.planner-section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); margin-bottom: var(--space-4); }
+.planner-section-head h2 { font-size: var(--fs-lg); }
+.planner-section-head p { margin-top: 4px; color: var(--text-muted); font-size: var(--fs-sm); }
+.planner-section-index { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-muted); font: 500 11px var(--font-mono); }
+.planner-controls { display: grid; grid-template-columns: minmax(180px, 1.3fr) repeat(2, minmax(160px, 1fr)); gap: var(--space-3); }
+.planner-control { display: grid; gap: 7px; min-width: 0; color: var(--text-muted); font-size: var(--fs-xs); }
+.planner-control > span { font-weight: 550; }
+.planner select, .planner input { min-width: 0; height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); padding: 0 var(--space-3); }
+.planner select:hover, .planner input:hover { border-color: var(--text-faint); }
+.planner select:focus-visible, .planner input:focus-visible { outline: none; border-color: var(--text); box-shadow: var(--ring); }
+.planner input::placeholder { color: var(--text-faint); }
+.planner input[readonly] { color: var(--text-muted); cursor: default; }
+.planner-range-hint { margin-top: var(--space-3); color: var(--text-faint); font-size: var(--fs-xs); }
+.planner-items { display: grid; gap: var(--space-3); }
+.planner-item { padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface-2) 48%, var(--surface)); }
+.planner-item-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.planner-item-title { font-size: var(--fs-sm); font-weight: 650; }
+.planner-remove { border: 0; padding: 5px 8px; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-size: var(--fs-xs); cursor: pointer; }
+.planner-remove:hover { background: var(--surface-2); color: var(--text); }
+.planner-item-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+.planner-field { display: grid; gap: 7px; min-width: 0; color: var(--text-muted); font-size: var(--fs-xs); }
+.planner-field > span { font-weight: 550; }
+.planner-field input, .planner-field select { width: 100%; }
+.planner-field.subject-field, .planner-field.topic-field { grid-column: span 3; }
+.planner-field.priority-field, .planner-field.deadline-field, .planner-field.minutes-field { grid-column: span 2; }
+.planner-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-4); }
+.planner-actions .btn-primary { margin-left: auto; }
+.planner-error { margin-top: var(--space-3); color: var(--text); font-size: var(--fs-sm); }
+.planner-preview .card-head { margin-bottom: var(--space-2); }
+.planner-preview .muted { font-size: var(--fs-sm); }
+.plan-task { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+.plan-task:first-child { margin-top: var(--space-4); }
+.plan-task > div { display: grid; gap: 4px; }
+.plan-task span { font-size: var(--fs-sm); color: var(--text-muted); }
+.plan-task label { display: grid; gap: 6px; color: var(--text-muted); font-size: var(--fs-xs); }
+.plan-task input, .plan-task select { width: 130px; }
+@media (max-width: 720px) {
+  .planner-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .planner-controls .range-control { grid-column: 1 / -1; }
+  .planner-item-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .planner-field.subject-field, .planner-field.topic-field { grid-column: 1 / -1; }
+  .planner-field.priority-field, .planner-field.deadline-field { grid-column: span 1; }
+  .planner-field.minutes-field { grid-column: 1 / -1; }
+}
+@media (max-width: 480px) {
+  .planner-section { padding: var(--space-4); }
+  .planner-controls, .planner-item-grid { grid-template-columns: 1fr; }
+  .planner-controls .range-control, .planner-field { grid-column: 1 / -1 !important; }
+  .planner-actions .btn-primary { margin-left: 0; width: 100%; }
+  .plan-task label, .plan-task input, .plan-task select { width: 100%; }
+}

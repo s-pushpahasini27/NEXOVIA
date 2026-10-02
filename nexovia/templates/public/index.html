@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}Nexovia — The Future of Smarter Learning{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">{% endblock %}
+{% block body %}
+<nav class="lp-nav" id="lp-nav">
+  <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark">N</span>Nexovia</a>
+  <div class="lp-nav-links">
+    <a href="#features">Features</a>
+    <a href="#ai-tools">AI Tools</a>
+    <a href="#community">Community</a>
+    <a href="#about">About</a>
+  </div>
+  <div class="lp-nav-actions">
+    <a class="btn" href="{{ url_for('auth.login') }}">Sign in</a>
+    <a class="btn btn-primary" href="{{ url_for('auth.register') }}">Get Started</a>
+  </div>
+</nav>
+
+<header class="lp-hero">
+  <span class="lp-badge">{{ icon('sparkles') }}AI-Powered Learning Platform</span>
+  <h1>The Future of Smarter Learning Starts Here.</h1>
+  <p class="lead">Everything a student needs. Nothing a student doesn't.</p>
+  <div class="lp-cta-row">
+    <a class="btn btn-primary" href="{{ url_for('auth.register') }}">Get Started</a>
+    <a class="btn" href="#features">Explore Features</a>
+  </div>
+  <div class="lp-stats">
+    <div class="lp-stat"><div class="lp-stat-value" data-count-to="25000" data-count-suffix="+">0</div><div class="lp-stat-label">Students</div></div>
+    <div class="lp-stat"><div class="lp-stat-value" data-count-to="120000" data-count-suffix="+">0</div><div class="lp-stat-label">Flashcards</div></div>
+    <div class="lp-stat"><div class="lp-stat-value" data-count-to="1000000" data-count-suffix="+">0</div><div class="lp-stat-label">AI Questions</div></div>
+  </div>
+</header>
+
+<section class="lp-section" id="features">
+  <div class="lp-section-head reveal">
+    <div class="lp-eyebrow">Features</div>
+    <h2>Every study tool, in one place</h2>
+    <p>Nexovia brings your notes, planning, practice and progress together — powered by AI that actually understands your coursework.</p>
+  </div>
+  <div class="lp-grid">
+    {% set features = [
+      ('chat', 'AI Tutor', 'Ask questions in plain language and get explanations tailored to how you learn.'),
+      ('calendar', 'Smart Planner', 'A study schedule that adapts to your deadlines, energy and past sessions.'),
+      ('cards', 'AI Flashcards', 'Generate spaced-repetition flashcards straight from your notes and readings.'),
+      ('quiz', 'Quiz Generator', 'Turn any topic into a practice quiz that targets exactly what you need to review.'),
+      ('users', 'Community', 'Join study groups and share notes with classmates in the same courses.'),
+      ('pin', 'Nearby Students', 'Find study partners and groups meeting near you on campus.'),
+      ('chart', 'Analytics', 'See your study streaks, mastery by topic, and where to focus next.'),
+    ] %}
+    {% for f, t, d in features %}
+    <div class="lp-card reveal" {% if loop.index0 == 0 %}id="ai-tools"{% elif loop.index0 == 4 %}id="community"{% endif %}>
+      <div class="lp-card-icon">{{ icon(f) }}</div>
+      <h3>{{ t }}</h3>
+      <p>{{ d }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="lp-final-cta reveal" id="about">
+  <h2>Ready to study smarter?</h2>
+  <p class="muted" style="margin-bottom:var(--space-5)">Create a free account and get your first AI study session in minutes.</p>
+  <a class="btn btn-primary" href="{{ url_for('auth.register') }}">Get Started<span style="display:inline-flex;margin-left:8px">{{ icon('arrow-right') }}</span></a>
+</section>
+
+<footer class="lp-footer">
+  <div class="lp-footer-top">
+    <div class="lp-footer-brand">
+      <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark">N</span>Nexovia</a>
+      <p>The AI-powered learning platform for students who want to understand more and memorize less.</p>
+    </div>
+    <div class="lp-footer-cols">
+      <div class="lp-footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#ai-tools">AI Tools</a>
+        <a href="#community">Community</a>
+      </div>
+      <div class="lp-footer-col">
+        <h4>Account</h4>
+        <a href="{{ url_for('auth.login') }}">Sign in</a>
+        <a href="{{ url_for('auth.register') }}">Get Started</a>
+      </div>
+    </div>
+  </div>
+  <div class="lp-footer-bottom">© 2026 Nexovia. All rights reserved.</div>
+</footer>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/landing.js') }}"></script>{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "auth/_layout.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}Sign in · Nexovia{% endblock %}
+{% block card %}
+<div>
+  <h1>Welcome back</h1>
+  <p class="muted" style="margin-top:8px">Sign in to continue learning.</p>
+</div>
+<form class="auth-form" method="post" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+  <div class="field">
+    <label for="email">Email</label>
+    <input class="input" id="email" name="email" type="email" autocomplete="email" placeholder="you@school.edu" value="{{ email }}" required autofocus>
+  </div>
+  <div class="field">
+    <label for="password">Password</label>
+    <div class="input-wrap">
+      <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+      <button class="icon-btn" type="button" data-toggle-password="password" aria-label="Show password">{{ icon('eye') }}</button>
+    </div>
+  </div>
+  <label class="check"><input type="checkbox" name="remember"> Keep me signed in for 30 days</label>
+  <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+</form>
+<p class="auth-alt">New to Nexovia? <a href="{{ url_for('auth.register') }}">Create an account</a></p>
+{% endblock %}

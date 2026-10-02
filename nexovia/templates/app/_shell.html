@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/shell.css') }}">{% endblock %}
+{% block body %}
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="{{ url_for('main.app_home') }}"><span class="brand-mark">N</span>Nexovia</a>
+    <nav class="nav" aria-label="Primary">
+      <a class="nav-item {{ 'active' if request.endpoint == 'main.app_home' else '' }}" href="{{ url_for('main.app_home') }}">{{ icon('home') }}Home</a>
+      <a class="nav-item {{ 'active' if request.endpoint == 'main.planner' else '' }}" href="{{ url_for('main.planner') }}">{{ icon('calendar') }}Planner</a>
+      <div class="nav-label">Coming soon</div>
+      <span class="nav-item">{{ icon('chat') }}AI tutor<span class="nav-soon">Phase 4</span></span>
+      <span class="nav-item">{{ icon('book') }}Notes<span class="nav-soon">Phase 5</span></span>
+      <span class="nav-item">{{ icon('cards') }}Flashcards<span class="nav-soon">Phase 5</span></span>
+      <span class="nav-item">{{ icon('chart') }}Progress<span class="nav-soon">Phase 6</span></span>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="avatar">{{ g.user['name'][:1]|upper }}</div>
+      <div class="who"><strong>{{ g.user['name'] }}</strong><span>{{ g.user['email'] }}</span></div>
+      <form method="post" action="{{ url_for('auth.logout') }}" style="margin-left:auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="icon-btn" type="submit" aria-label="Sign out">{{ icon('logout') }}</button>
+      </form>
+    </div>
+  </aside>
+  <div class="content">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" type="button" id="menu-btn" aria-label="Open menu">{{ icon('menu') }}</button>
+      <button class="cmd-trigger" type="button" id="cmd-open">{{ icon('search') }}Search or jump to…<kbd>Ctrl K</kbd></button>
+    </header>
+    <main class="page">{% block page %}{% endblock %}</main>
+  </div>
+</div>
+
+<div class="palette-backdrop" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="palette">
+    <input id="palette-input" placeholder="Type a command…" autocomplete="off" aria-label="Command">
+    <div class="palette-list" id="palette-list" role="listbox"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/shell.js') }}"></script>{% endblock %}

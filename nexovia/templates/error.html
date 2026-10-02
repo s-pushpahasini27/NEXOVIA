@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} · Nexovia{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">{% endblock %}
+{% block body %}
+<main class="public-hero">
+  <div class="public-body">
+    <div>
+      <p class="muted" style="margin-bottom:8px">{{ code }}</p>
+      <h1>{{ 'Page not found' if code == 404 else 'Something went wrong' }}</h1>
+      <p>{{ message }}</p>
+      <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back home</a>
+    </div>
+  </div>
+</main>
+{% endblock %}
