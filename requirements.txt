@@ -1,5 +1,8 @@
-Flask>=3.0,<4
-Werkzeug>=3.0,<4
-tzdata>=2026.1
-# Tooling (tests / browser pass only)
-playwright>=1.44
+fastapi==0.142.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+python-dotenv==1.2.4
+PyJWT[crypto]==2.15.1
+httpx==0.28.1
+pypdf==6.10.0
+tzdata==2026.2

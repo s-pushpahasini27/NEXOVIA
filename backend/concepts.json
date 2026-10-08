@@ -1,0 +1,132 @@
+[
+  {
+    "topic": "Graph traversal",
+    "subject": "Data Structures",
+    "q": "Which data structure does breadth-first search use?",
+    "options": [
+      "Queue",
+      "Stack",
+      "Heap",
+      "Binary search tree"
+    ],
+    "answer": 0,
+    "explanation": "BFS uses a queue to visit vertices level by level. With an adjacency list, its time complexity is O(V + E)."
+  },
+  {
+    "topic": "Graph traversal",
+    "subject": "Data Structures",
+    "q": "What prevents revisiting vertices in a cyclic graph?",
+    "options": [
+      "A visited set",
+      "Sorting the edges",
+      "A larger queue",
+      "An adjacency matrix alone"
+    ],
+    "answer": 0,
+    "explanation": "Track visited vertices before adding them to the traversal frontier to prevent repeated visits and cycles."
+  },
+  {
+    "topic": "Binary search",
+    "subject": "Data Structures",
+    "q": "What condition must hold for ordinary binary search?",
+    "options": [
+      "The input is sorted",
+      "The input has no duplicates",
+      "All values are positive",
+      "The input is a linked list"
+    ],
+    "answer": 0,
+    "explanation": "Binary search relies on sorted order to discard half of the remaining search interval at each step."
+  },
+  {
+    "topic": "Binary search",
+    "subject": "Data Structures",
+    "q": "What is the worst-case time complexity of binary search on an array?",
+    "options": [
+      "O(log n)",
+      "O(n)",
+      "O(n log n)",
+      "O(1)"
+    ],
+    "answer": 0,
+    "explanation": "Each comparison halves the remaining range. About log₂(n) comparisons are needed."
+  },
+  {
+    "topic": "Dynamic programming",
+    "subject": "Data Structures",
+    "q": "Which pair of properties is useful for dynamic programming?",
+    "options": [
+      "Overlapping subproblems and optimal substructure",
+      "Unique keys and stable sorting",
+      "Random input and recursion",
+      "Negative weights and cycles"
+    ],
+    "answer": 0,
+    "explanation": "Dynamic programming reuses overlapping subproblems; optimal substructure lets solutions be built from suitable subproblem solutions."
+  },
+  {
+    "topic": "Normalization",
+    "subject": "Database Systems",
+    "q": "What does first normal form require?",
+    "options": [
+      "Atomic values and no repeating groups",
+      "Every determinant is a candidate key",
+      "No transitive dependencies",
+      "All columns are numeric"
+    ],
+    "answer": 0,
+    "explanation": "First normal form uses atomic attribute values and removes repeating groups. Higher normal forms impose dependency constraints."
+  },
+  {
+    "topic": "Normalization",
+    "subject": "Database Systems",
+    "q": "Which dependency is removed when moving from 1NF to 2NF?",
+    "options": [
+      "Partial dependency on a candidate key",
+      "Every functional dependency",
+      "Only transitive dependency",
+      "Every foreign key"
+    ],
+    "answer": 0,
+    "explanation": "In 2NF, every non-prime attribute is fully functionally dependent on every candidate key; partial dependencies are removed."
+  },
+  {
+    "topic": "SQL joins",
+    "subject": "Database Systems",
+    "q": "What does a LEFT JOIN retain?",
+    "options": [
+      "All rows from the left table",
+      "Only matching rows",
+      "All rows from the right table",
+      "Only unmatched rows"
+    ],
+    "answer": 0,
+    "explanation": "LEFT JOIN returns every left-table row, plus matching right-table values. Unmatched right-side columns contain NULL."
+  },
+  {
+    "topic": "Transactions",
+    "subject": "Database Systems",
+    "q": "Which ACID property means a transaction is all-or-nothing?",
+    "options": [
+      "Atomicity",
+      "Consistency",
+      "Isolation",
+      "Durability"
+    ],
+    "answer": 0,
+    "explanation": "Atomicity ensures the transaction commits all its operations or rolls them all back."
+  },
+  {
+    "topic": "Python",
+    "subject": "Programming",
+    "q": "Which built-in Python collection is immutable?",
+    "options": [
+      "Tuple",
+      "List",
+      "Dictionary",
+      "Set"
+    ],
+    "answer": 0,
+    "explanation": "A tuple cannot have its elements reassigned after creation. Lists, dictionaries and sets are mutable."
+  }
+]
