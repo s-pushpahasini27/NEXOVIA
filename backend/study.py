@@ -1,15 +1,11 @@
-"""Python port of the original scheduler, validation, and practice bank."""
-import json
+"""Deterministic scheduling and input validation."""
 import math
-import random
 import re
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 from .db import uid
 
 ZONE = ZoneInfo('Asia/Kolkata')
-concepts = json.loads(Path(__file__).with_name('concepts.json').read_text(encoding='utf-8'))
 
 def today():
     return datetime.now(ZONE).date().isoformat()
@@ -137,12 +133,3 @@ def conflicts(proposed, existing, x):
             if any(minutes(t['time']) < minutes(c['time']) + c['duration'] and minutes(c['time']) < minutes(t['time']) + t['duration'] for c in current):
                 errors.append(f"{day} at {t['time']} overlaps a session in another plan.")
     return list(dict.fromkeys(errors))
-
-def practice(topic, count):
-    words = [w for w in topic.lower().split() if len(w) > 2]
-    source = [c for c in concepts if any(w in (c['topic'] + ' ' + c['subject']).lower() for w in words)] or concepts
-    result = []
-    for c in source[:max(1, min(count, len(source)))]:
-        shift = random.randrange(4)
-        result.append({**c, 'options': c['options'][shift:] + c['options'][:shift], 'answer': (4 - shift) % 4})
-    return result

@@ -19,7 +19,7 @@ const initials = (value = "N") =>
     .join("")
     .toUpperCase();
 
-export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
+export function RealtimeCall({ userId, peer, peers, onIncomingPeer, requestCall }: any) {
   const [call, setCall] = useState<any>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -27,15 +27,24 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
   const [videoOn, setVideoOn] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [connected, setConnected] = useState(false);
   const callRef = useRef<any>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const relayConfiguredRef = useRef(false);
   const pendingLocal = useRef<any[]>([]);
   const pendingRemote = useRef<any[]>([]);
   const seenCandidates = useRef(new Set<string>());
+  const syncPending = useRef(false);
+  const peersRef = useRef(peers);
+  peersRef.current = peers;
+  const incomingHandler = useRef(onIncomingPeer);
+  incomingHandler.current = onIncomingPeer;
+  const lastRequest = useRef<string>('');
 
   const request = async (data: any) => {
     const response = await fetch("/api/calls", {
@@ -64,6 +73,7 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
     setRemoteStream(null);
     setAudioOn(true);
     setVideoOn(true);
+    setConnected(false);
     pendingLocal.current = [];
     pendingRemote.current = [];
     seenCandidates.current.clear();
@@ -106,56 +116,78 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
       }
     }
   };
-  const createConnection = (stream: MediaStream) => {
+  const createConnection = async (stream: MediaStream) => {
+    const response = await fetch('/api/calls/config', { cache: 'no-store' });
+    const config = await response.json();
+    if (!response.ok) throw new Error(config.error || 'Call configuration is unavailable.');
+    relayConfiguredRef.current = Boolean(config.relayConfigured);
+    if (!config.relayConfigured) toast.info('No TURN relay is configured. Calls may fail on restricted networks.');
     const connection = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-      ],
+      iceServers: config.iceServers,
     });
     stream.getTracks().forEach((track) => connection.addTrack(track, stream));
     connection.onicecandidate = (event) => {
       if (event.candidate) void sendCandidate(event.candidate.toJSON());
     };
     connection.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
+      // Some browsers deliver audio and video in separate, streamless events.
+      // Keep every remote track instead of replacing the first one.
+      const tracks = [...(remoteStreamRef.current?.getTracks() || []), ...event.streams.flatMap((item) => item.getTracks()), event.track];
+      const stream = new MediaStream(tracks.filter((track, index) => tracks.findIndex((item) => item.id === track.id) === index));
       remoteStreamRef.current = stream;
       setRemoteStream(stream);
     };
     connection.onconnectionstatechange = () => {
+      setConnected(connection.connectionState === "connected");
       if (connection.connectionState === "failed")
         setError(
-          "The peer-to-peer connection failed. End the call and try again.",
+          relayConfiguredRef.current
+            ? "The peer-to-peer connection failed. End the call and try again."
+            : "The connection failed. A TURN relay may be needed on this network; end the call and try again.",
+        );
+    };
+    connection.oniceconnectionstatechange = () => {
+      if (connection.iceConnectionState === "disconnected")
+        setError("The call is reconnecting. Keep this window open for a moment.");
+      if (connection.iceConnectionState === "failed")
+        setError(
+          relayConfiguredRef.current
+            ? "The network path failed. Check both connections and try the call again."
+            : "The network path failed. Configure a TURN relay for calls across restricted networks.",
         );
     };
     pcRef.current = connection;
     return connection;
   };
-  const getMedia = async () => {
+  const getMedia = async (media = 'video') => {
+    if (!window.isSecureContext)
+      throw new Error("Calls require HTTPS or localhost so the browser can use your microphone and camera.");
     if (!navigator.mediaDevices?.getUserMedia)
       throw new Error(
         "Camera and microphone access is unavailable in this browser.",
       );
-    return navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    setVideoOn(media === 'video');
+    return navigator.mediaDevices.getUserMedia({ audio: true, video: media === 'video' });
   };
   const attachLocal = (stream: MediaStream) => {
     localStreamRef.current = stream;
     setLocalStream(stream);
   };
 
-  const start = async () => {
+  const start = async (media = 'video') => {
     if (!peer || busy || callRef.current) return;
     setBusy(true);
     setError("");
     try {
-      const stream = await getMedia();
+      const stream = await getMedia(media);
       attachLocal(stream);
-      const connection = createConnection(stream);
+      const connection = await createConnection(stream);
       const offer = await connection.createOffer();
       await connection.setLocalDescription(offer);
       const result = await request({
         action: "start",
         peer: peer.id,
+        media,
         offer: connection.localDescription?.toJSON(),
       });
       callRef.current = result.call;
@@ -178,9 +210,9 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
     setBusy(true);
     setError("");
     try {
-      const stream = await getMedia();
+      const stream = await getMedia(current.media);
       attachLocal(stream);
-      const connection = createConnection(stream);
+      const connection = await createConnection(stream);
       await connection.setRemoteDescription(current.offer);
       await flushRemote();
       const answer = await connection.createAnswer();
@@ -204,6 +236,13 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (requestCall?.id && requestCall.id !== lastRequest.current) {
+      lastRequest.current = requestCall.id;
+      void start(requestCall.media);
+    }
+  }, [requestCall?.id]);
   const finish = async (decline = false) => {
     const current = callRef.current;
     if (current?.id) {
@@ -224,10 +263,15 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
   }, [localStream, call?.id]);
   useEffect(() => {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = call?.media === 'audio' ? remoteStream : null;
+    const element = call?.media === 'audio' ? remoteAudioRef.current : remoteVideoRef.current;
+    if (remoteStream && element) void element.play().catch(() => setError("Your browser blocked call audio. Click the call window, then try again."));
   }, [remoteStream, call?.id]);
   useEffect(() => {
     let mounted = true;
     const sync = async () => {
+      if (syncPending.current) return;
+      syncPending.current = true;
       try {
         const response = await fetch("/api/calls", { cache: "no-store" });
         if (!response.ok) return;
@@ -239,13 +283,18 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
           return;
         }
         const firstSeen = !callRef.current;
+        if (firstSeen && !pcRef.current && (current.status === 'active' || current.caller === userId)) {
+          await request({action:'end',callId:current.id});
+          toast.info('The previous call ended when this browser disconnected. Start a new call to reconnect.');
+          return;
+        }
         callRef.current = current;
         setCall(current);
         if (firstSeen && current.callee === userId) {
-          const incomingPeer = peers.find(
+          const incomingPeer = peersRef.current.find(
             (item: any) => item.id === current.caller,
           );
-          if (incomingPeer) onIncomingPeer(incomingPeer);
+          if (incomingPeer) incomingHandler.current(incomingPeer);
         }
         const connection = pcRef.current;
         if (
@@ -269,8 +318,8 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
         }
         await flushRemote();
       } catch {
-        // The workspace already displays server connectivity problems.
-      }
+        if (callRef.current) setError('Could not reach the call service. Check your connection.');
+      } finally { syncPending.current = false; }
     };
     void sync();
     const timer = window.setInterval(sync, 1000);
@@ -278,9 +327,12 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
       mounted = false;
       window.clearInterval(timer);
     };
-  }, [userId, peers.length]);
-  useEffect(
-    () => () => {
+  }, [userId]);
+  useEffect(() => {
+    // React may temporarily unmount a component during a normal UI update.
+    // Ending the server call from that cleanup was hanging up active calls.
+    // Only notify the server when the learner actually leaves the document.
+    const leavePage = () => {
       const current = callRef.current;
       if (current?.id)
         fetch("/api/calls", {
@@ -289,11 +341,14 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
           body: JSON.stringify({ action: "end", callId: current.id }),
           keepalive: true,
         }).catch(() => {});
+    };
+    window.addEventListener("pagehide", leavePage);
+    return () => {
+      window.removeEventListener("pagehide", leavePage);
       pcRef.current?.close();
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    },
-    [],
-  );
+    };
+  }, []);
 
   const callPeerId = call
     ? call.caller === userId
@@ -303,15 +358,17 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
   const callPeer = peers.find((item: any) => item.id === callPeerId) || peer;
   const incoming = call?.status === "ringing" && call?.callee === userId;
   const active = call?.status === "active";
+  const audioCall = call?.media === "audio";
+  const remoteVideoReady = Boolean(remoteStream?.getVideoTracks().length);
   return (
     <>
-      <button
+      {!requestCall && <button
         className="secondary"
         disabled={!peer || busy || !!call}
-        onClick={start}
+        onClick={() => start('video')}
       >
         <Video size={15} /> {busy ? "Starting…" : "Call"}
-      </button>
+      </button>}
       <Dialog open={!!call} onOpenChange={(open) => !open && finish(incoming)}>
         <DialogContent className="call-dialog">
           <DialogHeader>
@@ -333,7 +390,7 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
                 {initials(callPeer?.name)}
               </span>
               <p>
-                Camera and microphone access is requested only after you accept.
+                {call?.media === 'audio' ? 'Microphone' : 'Camera and microphone'} access is requested only after you accept.
               </p>
               <div className="call-actions">
                 <button
@@ -351,7 +408,12 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
           ) : (
             <>
               <div className="call-stage">
-                {remoteStream ? (
+                {audioCall ? (
+                  <div className="call-waiting">
+                    <span className="avatar profile-avatar">{initials(callPeer?.name)}</span>
+                    <p>{connected ? 'Audio connected' : active ? 'Connecting audio…' : 'Waiting for an answer…'}</p>
+                  </div>
+                ) : remoteVideoReady ? (
                   <video ref={remoteVideoRef} autoPlay playsInline />
                 ) : (
                   <div className="call-waiting">
@@ -359,17 +421,18 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
                       {initials(callPeer?.name)}
                     </span>
                     <p>
-                      {active ? "Connecting video…" : "Waiting for an answer…"}
+                      {active ? 'Connecting video…' : "Waiting for an answer…"}
                     </p>
                   </div>
                 )}
-                <video
+                <audio ref={remoteAudioRef} autoPlay playsInline />
+                {!audioCall && <video
                   className="local-video"
                   ref={localVideoRef}
                   autoPlay
                   muted
                   playsInline
-                />
+                />}
               </div>
               <div className="call-controls">
                 <button
@@ -385,7 +448,7 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
                 >
                   {audioOn ? <Mic size={18} /> : <MicOff size={18} />}
                 </button>
-                <button
+                {call?.media !== 'audio' && <button
                   className={!videoOn ? "off" : ""}
                   onClick={() => {
                     const next = !videoOn;
@@ -397,7 +460,7 @@ export function RealtimeCall({ userId, peer, peers, onIncomingPeer }: any) {
                   aria-label={videoOn ? "Turn camera off" : "Turn camera on"}
                 >
                   {videoOn ? <Video size={18} /> : <VideoOff size={18} />}
-                </button>
+                </button>}
                 <button className="call-end" onClick={() => finish(false)}>
                   <PhoneOff size={19} /> End
                 </button>

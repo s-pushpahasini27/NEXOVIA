@@ -3,10 +3,10 @@
 import {useEffect,useState} from 'react';
 import {ThemeProvider,useTheme} from 'next-themes';
 import {Moon,Sun} from 'lucide-react';
-import {ParticleBackground} from './particle-background';
+import {FilmEnvironment} from './liquid-film-stage';
 
 export function AppTheme({children}:{children:React.ReactNode}){
- return <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="nexovia-theme" disableTransitionOnChange><ParticleBackground/><div className="app-shell">{children}</div></ThemeProvider>;
+ return <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} storageKey="nexovia-theme" disableTransitionOnChange><FilmEnvironment><div className="app-shell">{children}</div></FilmEnvironment></ThemeProvider>;
 }
 
 export function ThemeToggle(){
@@ -15,7 +15,7 @@ export function ThemeToggle(){
  useEffect(()=>setReady(true),[]);
  const dark=ready&&resolvedTheme==='dark';
  const label=dark?'Switch to light mode':'Switch to dark mode';
- return <button type="button" className="icon-button theme-toggle" aria-label={label} title={label} disabled={!ready} onClick={()=>setTheme(dark?'light':'dark')}><Sun size={18} className="theme-sun"/><Moon size={18} className="theme-moon"/></button>;
+ return <div className="appearance-controls"><button type="button" className="icon-button theme-toggle" aria-label={label} title={label} disabled={!ready} onClick={()=>setTheme(dark?'light':'dark')}><Sun size={18} className="theme-sun"/><Moon size={18} className="theme-moon"/></button></div>;
 }
 
 export function UserGreeting({name}:{name?:string}){

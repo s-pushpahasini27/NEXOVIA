@@ -1,7 +1,7 @@
 import json
 from urllib.parse import parse_qs, urlparse
 import pytest
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 from backend.main import app
 from backend.db import database, one
 from backend.study import today, add_days
@@ -9,6 +9,7 @@ from backend import google, gemini, main as main_module
 
 ORIGIN = 'http://127.0.0.1:8000'
 PASSWORD = 'correct horse battery staple'
+OTP_CODES = {}
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -17,11 +18,18 @@ def client(tmp_path, monkeypatch):
     monkeypatch.delenv('GOOGLE_OAUTH_CLIENT_ID', raising=False)
     monkeypatch.delenv('GOOGLE_OAUTH_CLIENT_SECRET', raising=False)
     monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    from backend import mailer
+    OTP_CODES.clear()
+    monkeypatch.setattr(mailer,'send_otp',lambda email,code:OTP_CODES.update({email:code}))
     with TestClient(app, base_url=ORIGIN, headers={'Origin': ORIGIN}) as c:
         yield c
 
 def signup(c, email='learner@example.com', name='Ada Learner'):
     r = c.post('/api/auth', json={'action': 'signup', 'email': email, 'password': PASSWORD, 'confirmPassword': PASSWORD})
+    assert r.status_code == 202, r.text
+    assert c.get('/api/workspace').status_code==401
+    # Test fixture mail transport captures delivered codes without bypassing OTP.
+    r = c.post('/api/auth',json={'action':'verifyEmail','code':OTP_CODES[email]})
     assert r.status_code == 201, r.text
     assert r.json()['redirect'] == '/onboarding'
     assert c.get('/api/workspace').status_code == 403
@@ -59,12 +67,12 @@ def test_plans_preserved_adaptive_optional_conflicts_and_tasks(client):
     c = client
     signup(c)
     x = plan_input()
-    preview = action(c, 'preview', input=x)
+    preview = action(c, 'preview', input=x, mode='rules')
     assert len(preview['tasks']) == 2  # Checkbox off still generates.
     state = action(c, 'savePlan', input=x, tasks=preview['tasks'])
     first_ids = {t['id'] for t in state['tasks']}
     y = plan_input(4, adaptive=True)
-    state = action(c, 'savePlan', input=y, tasks=action(c, 'preview', input=y)['tasks'])
+    state = action(c, 'savePlan', input=y, tasks=action(c, 'preview', input=y, mode='rules')['tasks'])
     assert len(state['plans']) == 2
     assert first_ids.issubset({t['id'] for t in state['tasks']})
     assert c.post('/api/workspace', json=dict(action='savePlan', input=x, tasks=preview['tasks'])).status_code == 400
@@ -84,6 +92,23 @@ def test_plans_preserved_adaptive_optional_conflicts_and_tasks(client):
     restored = action(c, 'restorePlan', id=state['plans'][0]['id'])
     assert len(restored['plans']) == 2
 
+def test_tutor_receives_only_the_signed_in_learners_upcoming_schedule(client, monkeypatch):
+    c = client
+    signup(c)
+    x = plan_input()
+    planned = action(c, 'preview', input=x, mode='rules')['tasks']
+    action(c, 'savePlan', input=x, tasks=planned)
+    captured = {}
+    def schedule_response(system, prompt, **kwargs):
+        captured.update(json.loads(prompt))
+        return {'answer': 'Tomorrow you have Python: Collections at 09:00.', 'citations': []}
+    monkeypatch.setattr(gemini, 'generate_json', schedule_response)
+    history = action(c, 'tutor', question='What is my schedule tomorrow?')['history']
+    assert history[-1]['body'].startswith('Tomorrow you have Python')
+    assert captured['scheduleTimezone'] == 'Asia/Kolkata'
+    assert captured['upcomingSchedule'][0]['subject'] == 'Python'
+    assert captured['upcomingSchedule'][0]['date'] == add_days(today(), 1)
+
 def test_files_tutor_quizzes_decks_and_isolation(client, monkeypatch):
     c = client
     signup(c)
@@ -95,8 +120,13 @@ def test_files_tutor_quizzes_decks_and_isolation(client, monkeypatch):
     rsrc = c.get('/api/workspace').json()['resources'][0]
     assert r.json()['resource']['id'] == rsrc['id']
     assert c.get(rsrc['url']).content.startswith(b'Binary search')
+    assert c.post('/api/workspace', json=dict(action='tutor', question='Explain binary search', resourceId=rsrc['id'])).status_code == 503
+    def tutor_response(system, prompt, **kwargs):
+        payload = json.loads(prompt)
+        return {'answer': 'Grounded test response.', 'citations': [s['id'] for s in payload['excerpts']]}
+    monkeypatch.setattr(gemini, 'generate_json', tutor_response)
     history = action(c, 'tutor', question='Explain binary search', resourceId=rsrc['id'])['history']
-    assert 'Matching passages' in history[-1]['body']
+    assert history[-1]['sources'][0]['resourceId'] == rsrc['id']
     class TextPage:
         def extract_text(self): return 'Mitochondria produce energy for the cell.'
     class TextPdf:
@@ -106,15 +136,17 @@ def test_files_tutor_quizzes_decks_and_isolation(client, monkeypatch):
     assert pdf.status_code == 200, pdf.text
     assert pdf.json()['resource']['searchable'] is True
     pdf_history = action(c, 'tutor', question='What do mitochondria produce?', resourceId=pdf.json()['resource']['id'])['history']
-    assert 'Matching passages from biology.pdf' in pdf_history[-1]['body']
+    assert pdf_history[-1]['sources'][0]['title'] == 'biology.pdf'
     assert c.post('/api/files', files={'file':('bad.pdf',b'not a PDF')}).status_code == 400
     assert c.post('/api/files', files={'file':('bad.exe',b'bad')}).status_code == 400
+    monkeypatch.setattr(gemini, 'generate_json', lambda *args, **kwargs: [dict(q=f'Question {i}', options=['A','B','C','D'], answer=0, explanation='Explanation') for i in range(3)])
     quiz = action(c, 'practice', topic='Binary search', count=3)
-    assert len(quiz['questions']) == 2
+    assert len(quiz['questions']) == 3
     assert all('answer' not in q and 'explanation' not in q for q in quiz['questions'])
     with database() as db:
         answers = [q['answer'] for q in json.loads(one(db,'SELECT questions FROM quiz_drafts WHERE id=?',quiz['id'])['questions'])]
-    assert action(c,'submitQuiz',id=quiz['id'],answers=answers)['score'] == 2
+    assert action(c,'submitQuiz',id=quiz['id'],answers=answers)['score'] == 3
+    assert action(c,'submitQuiz',id=quiz['id'],answers=[1,1,1])['score'] == 3
     action(c,'submitQuiz',id=quiz['id'],answers=answers)
     assert len(c.get('/api/workspace').json()['attempts']) == 1
     deck = action(c,'deck', title='Notes', notes='What is BFS? :: Breadth first search')['decks'][0]
@@ -183,13 +215,15 @@ def test_gemini_tutor_quiz_and_flashcards(client, monkeypatch):
     signup(c)
     monkeypatch.setenv('GEMINI_API_KEY','test-key')
     monkeypatch.setattr(gemini,'generate',lambda system,prompt,**kwargs:'A live Gemini explanation.')
-    def structured(system,prompt):
+    def structured(system,prompt, **kwargs):
+        if 'excerpts' in prompt:
+            return {'answer': 'A live Gemini explanation.', 'citations': []}
         if 'flashcards' in prompt:
             return [dict(q=f'Card {i}?',a=f'Answer {i}') for i in range(10)]
         return [dict(topic='Python',subject='Programming',q=f'Question {i}?',options=['A','B','C','D'],answer=0,explanation='Because A is correct.') for i in range(3)]
     monkeypatch.setattr(gemini,'generate_json',structured)
     tutor = action(c,'tutor',question='Explain lists')
-    assert tutor['aiConnected'] is True
+    assert tutor['aiConfigured'] is True
     assert tutor['history'][-1]['body'] == 'A live Gemini explanation.'
     quiz = action(c,'practice',topic='Python',count=3)
     assert quiz['mode'] == 'Gemini generated practice'
@@ -197,19 +231,20 @@ def test_gemini_tutor_quiz_and_flashcards(client, monkeypatch):
     deck_state = action(c,'deck',title='Python',notes='')
     assert len(deck_state['decks'][0]['cards']) == 10
 
-def test_gemini_study_planner_and_safe_fallback(client, monkeypatch):
+def test_gemini_study_planner_rejects_invalid_ai_without_fallback(client, monkeypatch):
     c = client
     signup(c)
     monkeypatch.setenv('GEMINI_API_KEY','test-key')
-    monkeypatch.setattr(gemini,'generate_json',lambda system,prompt:[{'session':0,'slot':0},{'session':1,'slot':1}])
+    monkeypatch.setattr(gemini,'generate_json',lambda system,prompt, **kwargs:[{'session':0,'slot':0},{'session':1,'slot':1}])
     preview = action(c,'preview',input=plan_input())
     assert preview['mode'] == 'Gemini AI planner'
     assert len(preview['tasks']) == 2
     assert preview['tasks'][0]['kind'] == 'Learn'
-    monkeypatch.setattr(gemini,'generate_json',lambda system,prompt:[{'session':0,'slot':0},{'session':0,'slot':1}])
-    fallback = action(c,'preview',input=plan_input())
-    assert fallback['mode'] == 'Smart scheduler fallback'
-    assert len(fallback['tasks']) == 2
+    monkeypatch.setattr(gemini,'generate_json',lambda system,prompt, **kwargs:[{'session':0,'slot':0},{'session':0,'slot':1}])
+    failure = c.post('/api/workspace', json=dict(action='preview',input=plan_input()))
+    assert failure.status_code == 502
+    assert 'duplicate' in failure.json()['error']
+    assert not c.get('/api/workspace').json()['plans']
 
 def test_google_flow_guards_and_mocked_verified_identity(client, monkeypatch):
     c = client

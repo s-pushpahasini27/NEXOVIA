@@ -9,9 +9,10 @@ import time
 from urllib.parse import urlencode, urlparse
 import httpx
 import jwt
-from fastapi.responses import RedirectResponse
+from .web import RedirectResponse
 from .auth import issue_session, session_user, secure, validate_email
 from .db import one, insert, uid, now
+from . import profile_photos
 
 FLOW_COOKIE = 'nexovia_google_flow'
 JWKS = jwt.PyJWKClient('https://www.googleapis.com/oauth2/v3/certs', timeout=10)
@@ -109,6 +110,11 @@ def callback(db, request):
             insert(db, 'profiles', id=user_id, name=str(claims.get('name') or email.split('@')[0])[:100], created=now())
         if not identity:
             insert(db, 'google_identities', sub=subject, user_id=user_id, created=int(time.time() * 1000))
+        picture = one(db, 'SELECT avatar_source FROM profiles WHERE id=?', user_id)
+        if picture and picture['avatar_source'] != 'upload':
+            profile_photos.google(db, user_id, claims.get('picture'))
+        db.execute('UPDATE auth_accounts SET email_verified=1 WHERE id=?',(user_id,))
+        db.execute('DELETE FROM email_challenges WHERE email=?',(email,))
         response = issue_session(db, request, RedirectResponse(target, status_code=303), user_id)
     except Exception as exc:
         db.rollback()

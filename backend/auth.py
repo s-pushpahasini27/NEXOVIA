@@ -4,8 +4,7 @@ import os
 import re
 import secrets
 import time
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse, RedirectResponse
+from .web import HTTPException, JSONResponse, RedirectResponse
 from .db import one, insert, now, uid
 from .study import integer
 
@@ -39,17 +38,30 @@ def validate_password(password):
     return password
 
 def validate_email(email):
-    email = str(email or '').strip().lower()
-    if len(email) > 254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
+    if not isinstance(email,str):
         raise ValueError('Enter a valid email address.')
-    return email
+    email = email.strip().lower()
+    if len(email)>254 or email.count('@')!=1:
+        raise ValueError('Enter a valid email address.')
+    local,domain = email.split('@')
+    try:
+        domain = domain.encode('idna').decode('ascii')
+    except UnicodeError:
+        raise ValueError('Enter a valid email address.')
+    labels = domain.split('.')
+    if not 1<=len(local)<=64 or not re.fullmatch(r"[a-z0-9!#$%&'*+/=?^_`{|}~.-]+",local) or local.startswith('.') or local.endswith('.') or '..' in local or len(labels)<2 or not all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',label) for label in labels) or labels[-1].isdigit() or len(domain)>253:
+        raise ValueError('Enter a valid email address.')
+    normalized = local+'@'+domain
+    if len(normalized)>254:
+        raise ValueError('Enter a valid email address.')
+    return normalized
 
 def session_user(db, request, required=False, complete=False):
     token = request.cookies.get(COOKIE, '')
     user = one(db, '''SELECT a.id AS userId,a.email,a.profile_complete AS profileComplete,
         a.password_hash!='google-only' AS hasPassword,p.name AS fullName
         FROM auth_sessions s JOIN auth_accounts a ON a.id=s.user_id
-        LEFT JOIN profiles p ON p.id=a.id WHERE s.token_hash=? AND s.expires>?''', digest(token), int(time.time() * 1000)) if token else None
+        LEFT JOIN profiles p ON p.id=a.id WHERE s.token_hash=? AND s.expires>? AND a.email_verified=1''', digest(token), int(time.time() * 1000)) if token else None
     if not user and required:
         raise HTTPException(401, 'Please sign in to save your study workspace.')
     if user and complete and not user['profileComplete']:
@@ -82,8 +94,19 @@ def limit_auth(db, request, email):
             raise HTTPException(429, 'Too many attempts. Please try again in ten minutes.')
 
 def handle_auth(db, request, b):
+    from . import email_verification
     action = b.get('action')
+    if action=='verifyEmail':
+        return email_verification.verify(db,request,b.get('code'))
+    if action=='resendVerification':
+        return email_verification.resend(db,request)
     if action == 'logout':
+        user = session_user(db,request)
+        if user:
+            from .call_history import finish
+            from .db import rows
+            for call in rows(db,"SELECT * FROM call_sessions WHERE status IN ('ringing','active') AND (caller=? OR callee=?)",user['userId'],user['userId']):
+                finish(db,call,'ended')
         revoke(db, request)
         response = RedirectResponse('/', status_code=303)
         response.delete_cookie(COOKIE, path='/', secure=secure(), httponly=True, samesite='lax')
@@ -98,15 +121,14 @@ def handle_auth(db, request, b):
             if password != b.get('confirmPassword'):
                 raise ValueError('Your passwords do not match.')
             if account:
-                raise ValueError('Unable to create this account. Try logging in with this email.')
-            user_id = uid()
-            insert(db, 'auth_accounts', id=user_id, email=email, password_hash=hash_password(password), profile_complete=0, created=int(time.time() * 1000))
-            insert(db, 'profiles', id=user_id, name=email.split('@')[0], created=now())
-            return issue_session(db, request, JSONResponse({'redirect': '/onboarding'}, status_code=201), user_id)
+                raise ValueError('This email already has a Nexovia account. Log in to continue, or use Continue with Google if it is the same email.')
+            return email_verification.begin(db,request,email,hash_password(password))
         dummy = 'scrypt$32768$8$3$' + '0' * 32 + '$' + '0' * 64
         valid = verify_password(password, account['password_hash'] if account and account['password_hash'] != 'google-only' else dummy)
         if not valid or not account:
             raise HTTPException(401, 'The email or password is incorrect.')
+        if not account['email_verified']:
+            return email_verification.begin(db,request,email,account['password_hash'],account['id'])
         return issue_session(db, request, JSONResponse({'redirect': '/workspace' if account['profile_complete'] else '/onboarding'}), account['id'])
     user = session_user(db, request, required=True)
     if action == 'profile':
@@ -117,7 +139,7 @@ def handle_auth(db, request, b):
             goal = 0
         if not name or len(name) > 100:
             raise ValueError('Enter a name up to 100 characters.')
-        if len(bio) > 1000 or len(subjects) > 500:
+        if len(bio) > 1000 or len(subjects) > 1500:
             raise ValueError('Keep your profile details within the displayed limits.')
         if not integer(goal, 30, 3360):
             raise ValueError('Choose a weekly goal between 30 and 3360 minutes.')
@@ -133,6 +155,7 @@ def handle_auth(db, request, b):
         if stored != 'google-only' and not verify_password(b.get('currentPassword', ''), stored):
             raise HTTPException(401, 'Your current password is incorrect.')
         db.execute('UPDATE auth_accounts SET password_hash=? WHERE id=?', (hash_password(password), user['userId']))
+        db.execute('DELETE FROM email_challenges WHERE email=?',(user['email'],))
         db.execute('DELETE FROM auth_sessions WHERE user_id=?', (user['userId'],))
         return issue_session(db, request, JSONResponse({'ok': True}), user['userId'])
     raise ValueError('Unknown action.')

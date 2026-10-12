@@ -54,8 +54,8 @@ export function ParticleBackground() {
       for (let index = 0; index < particles.length; index++) {
         const particle = particles[index];
         const palette = dark
-          ? ["201,175,255", "133,173,255", "176,142,238"]
-          : ["91,52,150", "61,108,167", "126,72,169"];
+          ? ["160,177,150", "196,141,107", "210,203,182"]
+          : ["68,88,65", "150,75,51", "112,105,78"];
         context.beginPath();
         context.fillStyle = `rgba(${palette[particle.tone]},${dark ? 0.27 : 0.36})`;
         context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
@@ -66,8 +66,8 @@ export function ParticleBackground() {
           if (distance < 105) {
             context.beginPath();
             context.strokeStyle = dark
-              ? `rgba(181,154,235,${(1 - distance / 105) * 0.055})`
-              : `rgba(91,58,139,${(1 - distance / 105) * 0.095})`;
+              ? `rgba(160,177,150,${(1 - distance / 105) * 0.055})`
+              : `rgba(68,88,65,${(1 - distance / 105) * 0.095})`;
             context.lineWidth = dark ? 0.7 : 0.9;
             context.moveTo(particle.x, particle.y);
             context.lineTo(next.x, next.y);

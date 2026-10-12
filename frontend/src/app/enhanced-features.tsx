@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   BookOpen,
@@ -39,7 +39,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { RealtimeCall } from "@/app/realtime-call";
+import { StudyVisual } from "@/app/study-visual";
+const MovingGradientButton = lazy(() => import("@/components/originkit/moving-gradient-button"));
+import {Avatar} from './profile-fields';
 
 const initials = (value: string) =>
   (value || "N")
@@ -116,8 +118,11 @@ export function AssistantPlus({ state, act, busy }: any) {
   const [resourceId, setResourceId] = useState("none");
   const [uploaded, setUploaded] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [output, setOutput] = useState('answer');
   const [listening, setListening] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(() => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const fileInput = useRef<HTMLInputElement>(null);
+  const questionInput = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
   const voiceSupported =
     typeof window !== "undefined" &&
@@ -134,7 +139,7 @@ export function AssistantPlus({ state, act, busy }: any) {
     ),
   ];
   const resources: [string, string][] = [
-    ["none", "Built-in study notes"],
+    ["none", "Search all my notes / general tutor"],
     ...resourceRecords
       .filter((resource: any) => resource.content || resource.searchable)
       .map(
@@ -145,12 +150,15 @@ export function AssistantPlus({ state, act, busy }: any) {
   const send = async (value = question) => {
     const clean = value.trim();
     if (!clean || busy) return;
+    const requestedOutput = output !== 'answer' ? output : /\b(draw|create|generate|make)\b.{0,80}\b(diagram|flowchart|workflow|mind\s?map)\b/i.test(clean) ? 'diagram' : /\b(draw|create|generate|make)\b.{0,80}\b(image|illustration|picture)\b/i.test(clean) ? 'image' : 'answer';
     if (
       await act(
-        "tutor",
+        requestedOutput === 'answer' ? "tutor" : "visual",
         {
           question: clean,
           resourceId: resourceId === "none" ? null : resourceId,
+          nativePdf: false,
+          kind: requestedOutput,
         },
         "",
       )
@@ -163,6 +171,8 @@ export function AssistantPlus({ state, act, busy }: any) {
     try {
       const form = new FormData();
       form.append("file", file);
+      form.append("ocr", "false");
+      form.append("nativePdf", "false");
       const response = await fetch("/api/files", {
         method: "POST",
         body: form,
@@ -232,37 +242,37 @@ export function AssistantPlus({ state, act, busy }: any) {
     },
     [],
   );
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   return (
     <>
-      <Heading
-        eyebrow="MAKE ROOM FOR UNDERSTANDING"
-        title="Your study assistant"
-        subtitle="Ask a question, use your saved notes as context, and keep the conversation in one place."
-      />
-      <section className="assistant-panel panel">
-        <div className="chat-history">
+      <div className="assistant-page-heading">
+        <div><p className="eyebrow"><Sparkles size={14}/> THINK BEYOND THE QUESTION</p><h1>Let’s make sense of <em>the hard part.</em></h1><p>Explore an idea, untangle a difficult step, study from your notes, or ask what is planned next. Your tutor is ready when you are.</p></div>
+        <div className="assistant-heading-aside" aria-hidden="true"><span>01</span><i/><span>ASK</span><i/><span>UNDERSTAND</span><i/><span>GROW</span></div>
+      </div>
+      {!state?.aiConfigured && <p className="auth-error" role="status">Live AI is not configured on this server. Your notes and history remain available; new AI answers require GEMINI_API_KEY.</p>}
+      <section className="assistant-panel panel assistant-studio" aria-label="Nexovia AI tutor">
+        <div className="assistant-studio-bar"><div className="assistant-studio-identity"><span className="assistant-studio-symbol"><Sparkles size={19}/></span><span><b>Nexovia Tutor</b><small>YOUR THINKING SPACE</small></span></div><div className="assistant-studio-status"><span/> One conversation, endless questions</div></div>
+        <div className="chat-history" role="log" aria-label="Tutor conversation">
           {!history.length ? (
             <div className="assistant-welcome">
               <span className="assistant-mark">
                 <Sparkles size={34} />
               </span>
-              <h2>What are we learning today?</h2>
+              <p className="assistant-welcome-kicker">START ANYWHERE</p>
+              <h2>What’s on your mind?</h2>
               <p>
-                Start with a concept, a confusing step, or a question from your
-                notes.
+                Bring the question you have. We’ll find a way through it together.
               </p>
-              <div className="suggested-prompts">
-                {[
-                  "Explain graph traversal step by step",
-                  "Quiz me on database normalization",
-                  "Compare SQL joins with examples",
-                  "Help me understand dynamic programming",
-                ].map((prompt) => (
-                  <button key={prompt} onClick={() => send(prompt)}>
-                    {prompt}
-                    <Sparkles size={14} />
-                  </button>
-                ))}
+              <div className="assistant-prompt-grid" aria-label="Question ideas">
+                {["What's my schedule tomorrow?", "Explain a concept in simple steps", "Quiz me on what I studied"].map((prompt, index) => <button type="button" key={prompt} onClick={() => {setQuestion(prompt);questionInput.current?.focus();}}><span>0{index+1}</span>{prompt}<Plus size={15} aria-hidden="true"/></button>)}
+              </div>
+              <div className="assistant-welcome-action" onClick={() => questionInput.current?.focus()}>
+                {reducedMotion ? <button type="button" className="assistant-focus-button" onClick={() => questionInput.current?.focus()}>Ask your first question <Send size={15}/></button> : <Suspense fallback={<button type="button" className="assistant-focus-button" onClick={() => questionInput.current?.focus()}>Ask your first question <Send size={15}/></button>}><MovingGradientButton label="ASK YOUR FIRST QUESTION" font={{fontFamily:'DM Sans, sans-serif',fontSize:11,fontWeight:700,letterSpacing:'.08em'}} padding="12px 20px" rounded={100} colors={{fill:'#171424',hoverFill:'#262036',textColor:'#f6f3fb',hoverTextColor:'#ffffff'}} border={{borderWidth:2,borderColor:'#3b3151'}} stroke={{headColor:'#70efd0',color:'#9274ed',count:2,speed:18,trail:56,movement:'step',direction:'cw'}} style={{minHeight:44}}/></Suspense>}
               </div>
             </div>
           ) : (
@@ -278,18 +288,26 @@ export function AssistantPlus({ state, act, busy }: any) {
                 <div>
                   <b>
                     {message.role === "assistant"
-                      ? state?.aiConnected
+                      ? message.provider?.startsWith('gemini:')
                         ? "Nexovia · Gemini tutor"
-                        : "Nexovia · Reference notes"
+                        : "Nexovia · Previous conversation"
                       : "You"}
                   </b>
                   <p>{message.body}</p>
+                  <StudyVisual visual={message.visual}/>
+                  {(message.sources || []).map((source: any) => (
+                    <details key={source.id}>
+                      <summary>Source: {source.title} · passage {source.passage}</summary>
+                      <blockquote>{source.excerpt}</blockquote>
+                      <a href={source.url} target="_blank" rel="noreferrer">Open source file</a>
+                    </details>
+                  ))}
                 </div>
               </div>
             ))
           )}
         </div>
-        <div className="composer">
+        <div className="composer assistant-composer">
           <input
             ref={fileInput}
             hidden
@@ -298,19 +316,21 @@ export function AssistantPlus({ state, act, busy }: any) {
             onChange={(event) => upload(event.target.files?.[0])}
           />
           <div className="assistant-context-row">
-            <Choice
+            <div className="assistant-select-group"><span>RESPONSE</span><Choice label="Response type" value={output} onChange={setOutput} options={[["answer","Explanation"],["diagram","Study diagram / workflow"],["image","Study image"]]}/></div>
+            {output==='image' && !state?.imageConfigured && <p className="auth-error">An image-capable Gemini model must be configured before generating study images.</p>}
+            <div className="assistant-select-group"><span>STUDY CONTEXT</span><Choice
               label="Study context"
               value={resourceId}
               onChange={setResourceId}
               options={resources}
-            />
+            /></div>
             {resourceId !== "none" && (
               <span className="selected-context">
                 <Check size={15} /> Using {selectedFile}
               </span>
             )}
           </div>
-          <form
+          <form className="assistant-compose-form"
             onSubmit={(event) => {
               event.preventDefault();
               send();
@@ -327,10 +347,11 @@ export function AssistantPlus({ state, act, busy }: any) {
               <Plus size={20} />
             </button>
             <input
+              ref={questionInput}
               aria-label="Ask a study question"
               placeholder={
                 resourceId === "none"
-                  ? "Ask about a concept…"
+                  ? "Ask about a concept or your schedule…"
                   : `Ask a question about ${selectedFile}…`
               }
               value={question}
@@ -353,11 +374,7 @@ export function AssistantPlus({ state, act, busy }: any) {
               <Send size={17} />
             </button>
           </form>
-          <p className="help">
-            Use + to attach PDF, TXT or Markdown notes. The selected file is
-            sent as private context with your question. Scanned/image-only PDFs
-            need OCR before upload. AI can make mistakes.
-          </p>
+          <p className="help">Attach text-based PDF, TXT or Markdown notes with +. Nexovia searches the selected material for relevant passages. AI can make mistakes.</p>
         </div>
       </section>
     </>
@@ -398,6 +415,8 @@ export function NotificationsView({
         notification.link.slice("community:".length),
       );
       go("Community");
+    } else if (notification.link === 'Practice') {
+      go('Practice');
     }
   };
   return (
@@ -526,7 +545,7 @@ export function NotificationsView({
   );
 }
 
-export function CommunityPlus({ state, act, go, busy, load }: any) {
+export function CommunityPlus({ state, act, go, busy, load, onCall }: any) {
   const [query, setQuery] = useState("");
   const [nearby, setNearby] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
@@ -778,7 +797,7 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
           </div>
           {incoming.map((peer: any) => (
             <div className="request-row" key={peer.id}>
-              <span className="avatar">{initials(peer.name)}</span>
+              <Avatar profile={peer} id={peer.id} name={peer.name}/>
               <div>
                 <b>{peer.name}</b>
                 <p>{peer.subjects || "Exploring new subjects"}</p>
@@ -818,7 +837,7 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
                 }
                 onClick={() => openChat(peer)}
               >
-                <span className="avatar">{initials(peer.name)}</span>
+                <Avatar profile={peer} id={peer.id} name={peer.name}/>
                 <div>
                   <b>{peer.name}</b>
                   <small>{peer.subjects || "Study connection"}</small>
@@ -844,19 +863,15 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
                   className="chat-profile-button"
                   onClick={() => setSelectedProfile(chatPeer)}
                 >
-                  <span className="avatar">{initials(chatPeer.name)}</span>
+                  <Avatar profile={peers.find((p:any)=>p.id===chatPeer.id)||chatPeer} id={chatPeer.id} name={chatPeer.name}/>
                   <div>
                     <b>{chatPeer.name}</b>
                     <small>View learning profile</small>
                   </div>
                 </button>
                 <div className="chat-header-actions">
-                  <RealtimeCall
-                    userId={state?.user?.id}
-                    peer={chatPeer}
-                    peers={peers}
-                    onIncomingPeer={openChat}
-                  />
+                  <button className="secondary" onClick={()=>onCall(chatPeer,'audio')}><Phone size={15}/> Audio call</button>
+                  <button className="secondary" onClick={()=>onCall(chatPeer,'video')}><Video size={15}/> Video call</button>
                   {chatPeer.video && (
                     <a
                       className="secondary"
@@ -878,6 +893,11 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
                   />
                 ) : (
                   chat.map((item: any) => (
+                    item.event_type ? <div key={item.id} className="call-history-event" role="group" aria-label={`${item.call_media} call ${item.event_type==='call_started'?'started':'ended'}`}>
+                      {item.call_media==='audio'?<Phone size={16}/>:<Video size={16}/>}
+                      <div><b>{item.call_media==='audio'?'Audio':'Video'} call {item.event_type==='call_started'?'started':item.call_status==='declined'?'declined':'ended'}</b>
+                      <small>{when(item.created)}{item.event_type==='call_ended'?` · Duration ${Math.floor((item.call_duration||0)/60)}m ${String((item.call_duration||0)%60).padStart(2,'0')}s`:''}</small></div>
+                    </div> :
                     <div
                       key={item.id}
                       className={
@@ -993,9 +1013,7 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
             const km = distance(peer);
             return (
               <article className="peer-card" key={peer.id}>
-                <span className="avatar peer-avatar">
-                  {initials(peer.name)}
-                </span>
+                <Avatar profile={peer} id={peer.id} name={peer.name} className="avatar peer-avatar"/>
                 <h3>{peer.name}</h3>
                 <p>
                   {peer.bio ||
@@ -1045,9 +1063,7 @@ export function CommunityPlus({ state, act, go, busy, load }: any) {
                 <DialogTitle>{selectedProfile.name}</DialogTitle>
               </DialogHeader>
               <div className="profile-hero">
-                <span className="avatar profile-avatar">
-                  {initials(selectedProfile.name)}
-                </span>
+                <Avatar profile={selectedProfile} id={selectedProfile.id} name={selectedProfile.name} className="avatar profile-avatar"/>
                 <div>
                   <h3>{selectedProfile.name}</h3>
                   <p>

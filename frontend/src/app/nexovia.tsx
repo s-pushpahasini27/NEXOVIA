@@ -1,3 +1,4 @@
+import {BrandMark} from './identity';
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
@@ -75,6 +76,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Toaster, toast } from "sonner";
+import { RealtimeCall } from './realtime-call';
+import {Avatar,ProfilePicturePicker,SkillPicker} from './profile-fields';
 import { api } from "@/lib/client";
 import { AccountSecurity } from "./auth-ui";
 import { ThemeToggle, UserGreeting } from "./theme-ui";
@@ -116,15 +119,6 @@ const fmt = (m: number) =>
   m >= 60
     ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m`
     : `${Math.round(m)} min`;
-const startTimeOptions: [string, string][] = Array.from(
-  { length: 48 },
-  (_, index) => {
-    const hour = Math.floor(index / 2);
-    const minute = index % 2 ? "30" : "00";
-    const value = `${String(hour).padStart(2, "0")}:${minute}`;
-    return [value, `${hour % 12 || 12}:${minute} ${hour < 12 ? "AM" : "PM"}`];
-  },
-);
 function Choice({
   value,
   onChange,
@@ -213,6 +207,7 @@ export default function Nexovia({
 }) {
   const { resolvedTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(sidebarDefaultOpen);
+  const [callRequest, setCallRequest] = useState<any>({});
   const [page, setPage] = useState("Overview"),
     [state, setState] = useState<any>(null),
     [loading, setLoading] = useState(true),
@@ -231,11 +226,18 @@ export default function Nexovia({
   const stateRef = useRef<any>(null),
     notificationIds = useRef<Set<string>>(new Set()),
     notificationsReady = useRef(false);
+  const revision = useRef(0);
+  const mutationPending = useRef(false);
+  const pollPending = useRef(false);
   stateRef.current = state;
   const load = useCallback(async () => {
+    if (mutationPending.current || pollPending.current) return;
+    pollPending.current = true;
+    const startedRevision = revision.current;
     try {
       const r = await fetch("/api/workspace");
       const data: any = await r.json();
+      if (startedRevision !== revision.current || mutationPending.current) return;
       if (data.error) {
         setError(data.error);
         setState(data);
@@ -247,7 +249,7 @@ export default function Nexovia({
           (item) => !item.read && !notificationIds.current.has(item.id),
         )) {
           toast.info(item.title, { description: item.body });
-          if ("Notification" in window && Notification.permission === "granted")
+          if (data.profile?.reminders && "Notification" in window && Notification.permission === "granted")
             new Notification(item.title, { body: item.body, tag: item.id });
         }
       }
@@ -258,6 +260,7 @@ export default function Nexovia({
     } catch {
       setError("Could not load your workspace. Please try again.");
     } finally {
+      pollPending.current = false;
       setLoading(false);
     }
   }, []);
@@ -279,17 +282,21 @@ export default function Nexovia({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   async function act(action: string, data: any = {}, message = "Saved") {
+    if (mutationPending.current) return null;
+    mutationPending.current = true;
+    revision.current++;
     setBusy(true);
     try {
       const result = await api(action, data);
       if (result.profile) setState(result);
-      if (action === "submitQuiz") await load();
       if (message) toast.success(message);
       return result;
     } catch (e: any) {
       toast.error(e.message);
       return null;
     } finally {
+      mutationPending.current = false;
+      if (action === 'submitQuiz') void load();
       setBusy(false);
     }
   }
@@ -357,6 +364,11 @@ export default function Nexovia({
     weekMinutes = sessions
       .filter((s: any) => s.date >= weekStart)
       .reduce((a: number, s: any) => a + s.minutes, 0);
+  const activityDays = Array.from({length:7},(_,i)=>{
+    const date=addDays(today(),i-6);
+    return {date,minutes:sessions.filter((session:any)=>session.date===date).reduce((n:number,session:any)=>n+session.minutes,0)};
+  });
+  const activityPeak = Math.max(60,...activityDays.map(day=>day.minutes));
   let streak = 0;
   const studyDates = new Set(sessions.map((s: any) => s.date));
   let offset = studyDates.has(today()) ? 0 : 1;
@@ -481,11 +493,11 @@ export default function Nexovia({
     <SidebarProvider
       open={sidebarOpen}
       onOpenChange={setSidebarOpen}
-      style={{ "--sidebar-width": "252px" } as any}
+      style={{ "--sidebar-width": "276px" } as any}
     >
-      <Sidebar>
+      <Sidebar className="nex-sidebar">
         <SidebarHeader className="brand">
-          <span className="brand-icon">N</span>
+          <span className="brand-icon"><BrandMark/></span>
           <b>
             Nexovia<span>THE STUDY WORKSPACE</span>
           </b>
@@ -494,7 +506,7 @@ export default function Nexovia({
           </span>
         </SidebarHeader>
         <SidebarContent>
-          <p className="nav-label">YOUR WORKSPACE</p>
+          <p className="nav-label">YOUR WORKSPACE <span>01 — 07</span></p>
           <SidebarMenu>
             {nav.map(([label, Icon]) => (
               <NavButton
@@ -506,7 +518,7 @@ export default function Nexovia({
               />
             ))}
           </SidebarMenu>
-          <p className="nav-label second">PREFERENCES</p>
+          <p className="nav-label second">PREFERENCES <span>YOUR SPACE</span></p>
           <SidebarMenu>
             {[
               ["Notifications", Bell],
@@ -524,12 +536,13 @@ export default function Nexovia({
         </SidebarContent>
         <SidebarFooter>
           <div className="side-note">
-            <Sparkles />
-            <b>A little progress. Every day.</b>
-            <p>Your next chapter starts with one focused session.</p>
+            <span className="side-note-symbol"><Sparkles /></span>
+            <small>A NOTE FOR TODAY</small>
+            <b>Keep your curiosity close.</b>
+            <p>Small steps have a way of becoming something remarkable.</p>
           </div>
           <button className="profile-button" onClick={() => go("Settings")}>
-            <span className="avatar">{initials(profile?.name || "N")}</span>
+            <Avatar profile={profile} id={state?.user?.id} name={profile?.name} />
             <div>
               <b>{profile?.name || "Your workspace"}</b>
               <span>Personal account</span>
@@ -569,7 +582,7 @@ export default function Nexovia({
               aria-label="Profile settings"
               onClick={() => go("Settings")}
             >
-              {initials(profile?.name || "N")}
+              {profile?.avatar_source?<img src={`/api/profile-picture/${encodeURIComponent(state?.user?.id)}?v=${encodeURIComponent(profile.avatar_updated||'1')}`} alt=""/>:initials(profile?.name || "N")}
             </button>
           </div>
         </header>
@@ -598,7 +611,7 @@ export default function Nexovia({
             <>
               <div className="page-heading">
                 <div>
-                  <p className="eyebrow">YOUR SPACE TO GROW</p>
+                  <p className="eyebrow">YOUR LEARNING, CONNECTED</p>
                   <UserGreeting name={profile?.name} />
                   <p>
                     {state?.plan
@@ -616,7 +629,7 @@ export default function Nexovia({
               <section className="hero-panel">
                 <div>
                   <span className="pill">
-                    <Sparkles size={14} /> MADE FOR YOUR WAY OF LEARNING
+                    <Sparkles size={14} /> YOUR NEXT CHAPTER
                   </span>
                   <h2>
                     {state?.plan ? "Your goals. Your pace." : "Big goals."}
@@ -645,24 +658,14 @@ export default function Nexovia({
                     Learn smarter. Connect better. Grow together.
                   </span>
                 </div>
-                <div className="study-art" aria-hidden="true">
-                  <div className="art-sheet">
-                    <BookOpen size={27} />
-                    <div className="art-lines">
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                    <span className="art-stamp">
-                      <CheckCircle2 size={28} />
-                    </span>
+                <div className="activity-ledger" role="group" aria-label="Recorded study minutes over the last seven days">
+                  <div className="activity-heading"><span className="eyebrow">YOUR LAST SEVEN DAYS</span><span>MINUTES LOGGED</span></div>
+                  <div className="activity-bars">
+                    {activityDays.map(({date,minutes})=>{
+                      return <div className="activity-day" key={date} aria-label={`${date}: ${minutes} minutes`}><span>{minutes}</span><div className="activity-track"><i style={{height:`${minutes/activityPeak*100}%`}}/></div><small>{new Date(date+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'})}</small></div>;
+                    })}
                   </div>
-                  <span className="art-label first">
-                    <Sparkles size={16} /> A little more clarity.
-                  </span>
-                  <span className="art-label last">
-                    <CheckCircle2 size={17} /> One step closer.
-                  </span>
+                  <div className="activity-total"><strong>{fmt(weekMinutes)}</strong><span>of {fmt(profile?.goal||600)} weekly goal</span></div>
                 </div>
               </section>
               <div className="stats">
@@ -872,6 +875,7 @@ export default function Nexovia({
               go={go}
               busy={busy}
               load={load}
+              onCall={(peer:any,media:string)=>setCallRequest({id:crypto.randomUUID(),peer,media})}
             />
           )}
           {page === "Settings" && (
@@ -1132,6 +1136,7 @@ export default function Nexovia({
           </p>
         </DialogContent>
       </Dialog>
+      {state?.user?.id && <RealtimeCall userId={state.user.id} peer={callRequest.peer} peers={state.peers||[]} requestCall={callRequest} onIncomingPeer={()=>go('Community')}/>}
       <Toaster
         theme={resolvedTheme === "dark" ? "dark" : "light"}
         position="bottom-right"
@@ -1416,7 +1421,8 @@ function PlannerPage({
 function PlanBuilder({ open, onClose, state, act, busy, onSaved }: any) {
   const [input, setInput] = useState<PlanInput>(defaultInput),
     [preview, setPreview] = useState<any>(null),
-    [step, setStep] = useState("setup");
+    [step, setStep] = useState("setup"),
+    [plannerMode, setPlannerMode] = useState('rules');
   useEffect(() => {
     if (open) {
       setInput(defaultInput());
@@ -1430,9 +1436,10 @@ function PlanBuilder({ open, onClose, state, act, busy, onSaved }: any) {
     const r = await act(
       "preview",
       {
+        mode: plannerMode,
         input: {
           ...input,
-          adaptive: !!state?.profile?.adaptive && input.adaptive,
+          adaptive: input.adaptive,
         },
       },
       "",
@@ -1581,21 +1588,25 @@ function PlanBuilder({ open, onClose, state, act, busy, onSaved }: any) {
             </div>
             <div className="form-grid">
               <Field label="Preferred start time (India)">
-                <Choice
+                <input
+                  type="time"
+                  step="60"
                   value={input.startTime}
-                  onChange={(value) => patch("startTime", value)}
-                  options={startTimeOptions}
-                  label="Preferred start time"
+                  onChange={(event) => patch("startTime", event.target.value)}
+                  aria-label="Preferred start time"
                 />
               </Field>
               <div className="toggle-field">
                 <div>
-                  <b>Adapt to my study pace</b>
-                  <span>Uses logged sessions after 5 sessions.</span>
+                  <label htmlFor="plan-adaptive">Adapt to my study pace</label>
+                  <span id="plan-adaptive-help">{(state?.sessions?.length||0)>=5 ? 'Uses your logged pace to adjust session length.' : `Uses your chosen session length until you log ${5-(state?.sessions?.length||0)} more study sessions.`}</span>
                 </div>
                 <Switch
+                  id="plan-adaptive"
                   checked={input.adaptive}
                   onCheckedChange={(v) => patch("adaptive", v)}
+                  aria-label="Adapt to my study pace"
+                  aria-describedby="plan-adaptive-help"
                 />
               </div>
             </div>
@@ -1732,11 +1743,13 @@ function PlanBuilder({ open, onClose, state, act, busy, onSaved }: any) {
                 )}
               </div>
             ))}
-            <p className="help">
-              <Info size={14} /> Gemini AI prioritizes your topics when
-              connected. Every generated plan is still checked for deadlines,
-              available time and conflicts.
-            </p>
+            <Field label="Planning engine">
+              <select value={plannerMode} onChange={e => setPlannerMode(e.target.value)}>
+                <option value="rules">Rules-based scheduling (no AI required)</option>
+                <option value="ai">Gemini AI prioritization</option>
+              </select>
+            </Field>
+            <p className="help">Both engines check deadlines and conflicts. AI errors never silently switch engines.</p>
             <div className="modal-actions">
               <button className="secondary" onClick={onClose}>
                 Cancel
@@ -1869,122 +1882,6 @@ function PlanBuilder({ open, onClose, state, act, busy, onSaved }: any) {
     </Dialog>
   );
 }
-function Assistant({ state, act, busy }: any) {
-  const [question, setQuestion] = useState(""),
-    [resourceId, setResourceId] = useState("none");
-  const history = state?.history || [];
-  const send = async (q = question) => {
-    if (!q.trim()) return;
-    if (
-      await act(
-        "tutor",
-        { question: q, resourceId: resourceId === "none" ? null : resourceId },
-        "",
-      )
-    )
-      setQuestion("");
-  };
-  return (
-    <>
-      <PageHeading
-        eyebrow="MAKE ROOM FOR UNDERSTANDING"
-        title="Your study assistant"
-        subtitle="Explore a concept, find a passage, or work through your notes."
-      />
-      <div className="notice">
-        <Sparkles size={18} />
-        <span>
-          <b>Reference mode</b> · Built-in study notes and text-file search are
-          available. Live AI conversation needs a connected provider.
-        </span>
-      </div>
-      <section className="assistant-panel panel">
-        <div className="chat-history">
-          {!history.length ? (
-            <div className="assistant-welcome">
-              <span className="assistant-mark">
-                <Sparkles size={34} />
-              </span>
-              <h2>What are we learning today?</h2>
-              <p>A good question is a great place to start.</p>
-              <div className="suggested-prompts">
-                {[
-                  "Explain graph traversal",
-                  "Help me understand normalization",
-                  "How do SQL joins work?",
-                  "Explain dynamic programming",
-                ].map((q) => (
-                  <button key={q} onClick={() => send(q)}>
-                    {q}
-                    <Plus size={15} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            history.map((m: any) => (
-              <div key={m.id} className={"chat-message " + m.role}>
-                <span className="message-avatar">
-                  {m.role === "assistant" ? (
-                    <Sparkles size={17} />
-                  ) : (
-                    initials(state?.profile?.name || "You")
-                  )}
-                </span>
-                <div>
-                  <b>
-                    {m.role === "assistant"
-                      ? "Nexovia · Reference notes"
-                      : "You"}
-                  </b>
-                  <p>{m.body}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="composer">
-          <Choice
-            label="Study context"
-            value={resourceId}
-            onChange={setResourceId}
-            options={[
-              "none",
-              ...(state?.resources || [])
-                .filter((r: any) => r.content)
-                .map((r: any) => [r.id, r.title]),
-            ].map((v: any) =>
-              v === "none" ? ["none", "Built-in study notes"] : v,
-            )}
-          />
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-          >
-            <input
-              aria-label="Ask a study question"
-              placeholder="Ask about a concept or search your notes…"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-            />
-            <button
-              className="primary"
-              aria-label="Send question"
-              disabled={busy || !question.trim()}
-            >
-              <Send size={17} />
-            </button>
-          </form>
-          <p className="help">
-            Check important facts against your course material.
-          </p>
-        </div>
-      </section>
-    </>
-  );
-}
 function Resources({ state, act, load, busy }: any) {
   const [query, setQuery] = useState(""),
     [open, setOpen] = useState(false),
@@ -2040,6 +1937,13 @@ function Resources({ state, act, load, busy }: any) {
       </div>
       <div className="resource-layout">
         <section>
+          {!!state?.trashedResources?.length && <details className="panel below">
+            <summary>Recently removed ({state.trashedResources.length})</summary>
+            {state.trashedResources.map((resource: any) => <div className="history-row" key={resource.id}>
+              <span>{resource.title}</span>
+              <button className="secondary" disabled={busy} onClick={() => act('restoreResource', {id: resource.id}, 'Resource restored')}>Restore</button>
+            </div>)}
+          </details>}
           {list.length ? (
             <div className="resource-grid">
               {list.map((r: any) => (
@@ -2062,12 +1966,12 @@ function Resources({ state, act, load, busy }: any) {
                       {r.kind === "link" ? "Open resource" : "Download file"}
                       <ExternalLink size={14} />
                     </a>
-                    {r.kind === "link" && (
+                    {(
                       <button
                         className="icon-button"
-                        title="Remove saved link"
+                        title="Remove saved resource"
                         onClick={() =>
-                          act("deleteResource", { id: r.id }, "Link removed")
+                          act("deleteResource", { id: r.id }, "Resource moved to Recently removed")
                         }
                       >
                         <Trash2 size={14} />
@@ -2095,7 +1999,6 @@ function Resources({ state, act, load, busy }: any) {
                   className="secondary"
                   onClick={() => {
                     setTitle("");
-                    setNotes("");
                     setOpen(true);
                   }}
                 >
@@ -2251,7 +2154,7 @@ function Practice({ state, act, busy, go }: any) {
     [answers, setAnswers] = useState<number[]>([]),
     [result, setResult] = useState<any>(null);
   const rate = async (rating: string) => {
-    if (await act("review", { id: deck.id, card, rating }, "")) {
+    if (await act("review", { id: deck.id, card: deck.cards[card].originalIndex, rating }, "")) {
       if (card < deck.cards.length - 1) {
         setCard(card + 1);
         setFlipped(false);
@@ -2302,8 +2205,9 @@ function Practice({ state, act, busy, go }: any) {
                 <button
                   className="deck-card"
                   key={d.id}
+                  disabled={!d.dueCards?.length}
                   onClick={() => {
-                    setDeck(d);
+                    setDeck({...d, cards: d.dueCards.map((index: number) => ({...d.cards[index], originalIndex: index}))});
                     setCard(0);
                     setFlipped(false);
                   }}
@@ -2322,7 +2226,7 @@ function Practice({ state, act, busy, go }: any) {
                     reviews
                   </p>
                   <span className="text-link">
-                    Start reviewing <ChevronRight size={15} />
+                    {d.dueCards?.length ? `Review ${d.dueCards.length} due cards` : `Next review: ${d.nextDue ? new Date(d.nextDue).toLocaleString() : 'None due'}`} <ChevronRight size={15} />
                   </span>
                 </button>
               ))}
@@ -2332,7 +2236,7 @@ function Practice({ state, act, busy, go }: any) {
               <Empty
                 icon={Layers}
                 title="Make knowledge stick"
-                body="Create a deck from the built-in study bank, or add your own question-and-answer notes."
+                body="Generate a deck with Gemini AI, or add your own question-and-answer notes. Reviews are scheduled from your recall ratings."
               >
                 <button className="secondary" onClick={() => setOpen(true)}>
                   Create your first deck
@@ -2379,8 +2283,7 @@ function Practice({ state, act, busy, go }: any) {
                 <Play size={16} /> Start practice quiz
               </button>
               <p className="help">
-                Uses Gemini when configured, with the built-in question bank as
-                a safe fallback.
+                Generates new questions with Gemini. Requires a configured AI key; provider errors are shown without substituting sample questions.
               </p>
             </section>
             <section className="panel">
@@ -2839,239 +2742,6 @@ function Analytics({ state, onPlan }: any) {
     </>
   );
 }
-function Community({ state, act, go, busy }: any) {
-  const [query, setQuery] = useState(""),
-    [nearby, setNearby] = useState(false),
-    [peer, setPeer] = useState<any>(null),
-    [message, setMessage] = useState("");
-  const profile = state?.profile;
-  const connection = (id: string) =>
-    (state?.connections || []).find(
-      (c: any) => c.sender === id || c.recipient === id,
-    );
-  const distance = (p: any) => {
-    if (profile?.latitude == null || p.latitude == null) return null;
-    const rad = (n: number) => (n * Math.PI) / 180;
-    const a =
-      Math.sin(rad(p.latitude - profile.latitude) / 2) ** 2 +
-      Math.cos(rad(profile.latitude)) *
-        Math.cos(rad(p.latitude)) *
-        Math.sin(rad(p.longitude - profile.longitude) / 2) ** 2;
-    return Math.round(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  };
-  const peers = (state?.peers || [])
-    .filter((p: any) =>
-      (p.name + " " + p.subjects).toLowerCase().includes(query.toLowerCase()),
-    )
-    .filter(
-      (p: any) =>
-        !nearby || (distance(p) != null && Number(distance(p)) <= 100),
-    );
-  const chat = (state?.messages || []).filter(
-    (m: any) => m.sender === peer?.id || m.recipient === peer?.id,
-  );
-  return (
-    <>
-      <PageHeading
-        eyebrow="GROW TOGETHER"
-        title="Find your study people"
-        subtitle="Shared goals. Different perspectives. Better learning."
-      >
-        <button className="secondary" onClick={() => go("Settings")}>
-          <Pencil size={16} /> Edit learning profile
-        </button>
-      </PageHeading>
-      <div className="community-banner">
-        <span className="community-icon">
-          <Users size={34} />
-        </span>
-        <div>
-          <h2>Learning is better with a little company.</h2>
-          <p>
-            Find learners with shared interests. Connect before starting a
-            conversation.
-          </p>
-        </div>
-        <span className="pill">PEER LEARNING</span>
-      </div>
-      {!profile?.discoverable && (
-        <div className="notice">
-          <ShieldCheck size={18} />
-          <span>
-            Your profile is private. Turn on community visibility in Settings to
-            help others find you.
-          </span>
-          <button className="secondary" onClick={() => go("Settings")}>
-            Privacy settings
-          </button>
-        </div>
-      )}
-      <div className="resource-toolbar">
-        <label className="search-field">
-          <Search size={18} />
-          <input
-            aria-label="Search learners"
-            placeholder="Search names or subjects…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <button
-          className={"secondary " + (nearby ? "active" : "")}
-          onClick={() => {
-            if (profile?.latitude == null) {
-              toast.info(
-                "Enable approximate location sharing in Settings to discover nearby learners.",
-              );
-              go("Settings");
-              return;
-            }
-            setNearby(!nearby);
-          }}
-        >
-          <MapPin size={16} /> {nearby ? "Within ~100 km" : "Nearby learners"}
-        </button>
-      </div>
-      {peers.length ? (
-        <div className="peer-grid">
-          {peers.map((p: any) => {
-            const c = connection(p.id);
-            return (
-              <div className="peer-card" key={p.id}>
-                <span className="avatar large">{initials(p.name)}</span>
-                <h3>{p.name}</h3>
-                <p>{p.bio || "Here to learn and grow."}</p>
-                <div className="peer-subjects">
-                  {p.subjects
-                    .split(",")
-                    .filter(Boolean)
-                    .map((s: string) => (
-                      <span className="subject-chip tone-0" key={s}>
-                        {s.trim()}
-                      </span>
-                    ))}
-                </div>
-                {distance(p) != null && (
-                  <small className="muted">
-                    Approximately {distance(p)} km away
-                  </small>
-                )}
-                <div className="peer-actions">
-                  {c?.status === "accepted" ? (
-                    <button className="primary" onClick={() => setPeer(p)}>
-                      <MessageCircle size={16} /> Chat
-                    </button>
-                  ) : c?.recipient === state?.user?.id ? (
-                    <button
-                      className="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        act("accept", { id: c.id }, "Connection accepted")
-                      }
-                    >
-                      Accept connection
-                    </button>
-                  ) : c ? (
-                    <button className="secondary" disabled>
-                      Request sent
-                    </button>
-                  ) : (
-                    <button
-                      className="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        act("connect", { id: p.id }, "Connection requested")
-                      }
-                    >
-                      <Plus size={16} /> Connect
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <section className="panel">
-          <Empty
-            icon={Users}
-            title={
-              query || nearby
-                ? "No learners found yet"
-                : "Your learning circle starts here"
-            }
-            body="Real learners appear when they join this app and choose to make their profiles visible. Try changing your filters or inviting people after sharing access."
-          />
-        </section>
-      )}
-      <p className="help below">
-        Nearby discovery uses an approximate area and list view. An interactive
-        map and built-in video calling are not connected. Connected learners can
-        open a meeting link from a shared profile.
-      </p>
-      <Dialog open={!!peer} onOpenChange={(v) => !v && setPeer(null)}>
-        <DialogContent className="chat-modal">
-          <DialogHeader>
-            <DialogTitle>{peer?.name}</DialogTitle>
-            <DialogDescription>
-              Connected learner · Messages refresh once a minute.
-            </DialogDescription>
-          </DialogHeader>
-          {peer?.video && (
-            <a
-              href={peer.video}
-              target="_blank"
-              rel="noreferrer"
-              className="secondary"
-            >
-              <Video size={16} /> Open shared meeting link
-            </a>
-          )}
-          <div className="peer-chat">
-            {chat.length ? (
-              chat.map((m: any) => (
-                <div
-                  className={m.sender === state.user.id ? "mine" : ""}
-                  key={m.id}
-                >
-                  <p>{m.body}</p>
-                  <small>
-                    {new Date(m.created).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </small>
-                </div>
-              ))
-            ) : (
-              <p className="help">
-                Say hello and share what you’d like to study together.
-              </p>
-            )}
-          </div>
-          <form
-            className="inline-form"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (await act("message", { id: peer.id, body: message }, ""))
-                setMessage("");
-            }}
-          >
-            <input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Write a message…"
-              aria-label="Message"
-            />
-            <button className="primary" disabled={busy || !message.trim()}>
-              <Send size={17} />
-            </button>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
 function SettingsView({ state, act, busy, googleEnabled }: any) {
   const dirty = useRef(false);
   const [p, setP] = useState<any>(
@@ -3141,9 +2811,9 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
         </button>
       </PageHeading>
       <div className="settings-grid">
-        <section className="panel">
+        <section className="panel settings-profile-card">
           <div className="profile-summary">
-            <span className="avatar large">{initials(p.name)}</span>
+            <Avatar profile={p} id={state?.user?.id} name={p.name} className="avatar large" />
             <div>
               <h2>{p.name || "Your profile"}</h2>
               <p>{state?.user?.email || "Sign in to create your profile"}</p>
@@ -3163,13 +2833,8 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
               placeholder="What are you learning? What would you like to share?"
             />
           </Field>
-          <Field label="Subjects and interests, separated by commas">
-            <input
-              value={p.subjects}
-              onChange={(e) => patch("subjects", e.target.value)}
-              placeholder="Data Structures, DBMS, Python"
-            />
-          </Field>
+          <div className="field"><span>Subjects and technical skills</span><SkillPicker value={p.subjects||''} onChange={value=>patch('subjects',value)}/></div>
+          <ProfilePicturePicker profile={p} id={state?.user?.id} onSaved={avatar_updated=>{dirty.current=true;setP((current:any)=>({...current,avatar_source:'upload',avatar_updated}))}}/>
           <Field label="Weekly study goal (minutes)">
             <input
               type="number"
@@ -3189,11 +2854,11 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
           </Field>
           <p className="help">
             A shared meeting link is visible with your community profile.
-            Built-in video hosting is not enabled.
+            Connected learners can also use the Call button in chat.
           </p>
         </section>
-        <div>
-          <section className="panel">
+        <div className="settings-stack">
+          <section className="panel settings-card">
             <h2>Study preferences</h2>
             {[
               [
@@ -3214,6 +2879,7 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
                 </div>
                 <Switch
                   checked={!!p[key]}
+                  aria-label={label}
                   onCheckedChange={(v) => patch(key, v ? 1 : 0)}
                 />
               </div>
@@ -3234,7 +2900,7 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
               rescheduling is not enabled.
             </p>
           </section>
-          <section className="panel below">
+          <section className="panel settings-card">
             <h2>Community & privacy</h2>
             <div className="setting-row">
               <div>
@@ -3246,6 +2912,7 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
               </div>
               <Switch
                 checked={!!p.discoverable}
+                aria-label="Make my profile discoverable"
                 onCheckedChange={(v) => {
                   patch("discoverable", v ? 1 : 0);
                   if (!v) {
@@ -3255,7 +2922,7 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
                 }}
               />
             </div>
-            <div className="setting-row">
+            <div className="setting-row location-setting">
               <div>
                 <b>Approximate location</b>
                 <p>
@@ -3264,22 +2931,22 @@ function SettingsView({ state, act, busy, googleEnabled }: any) {
                     : "Optional. Help nearby learners find you."}
                 </p>
               </div>
+              {p.latitude != null ? (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    patch("latitude", null);
+                    patch("longitude", null);
+                  }}
+                >
+                  Stop sharing location
+                </button>
+              ) : (
+                <button className="secondary" onClick={locate}>
+                  <MapPin size={16} /> Share approximate area
+                </button>
+              )}
             </div>
-            {p.latitude != null ? (
-              <button
-                className="secondary"
-                onClick={() => {
-                  patch("latitude", null);
-                  patch("longitude", null);
-                }}
-              >
-                Stop sharing location
-              </button>
-            ) : (
-              <button className="secondary" onClick={locate}>
-                <MapPin size={16} /> Share approximate area
-              </button>
-            )}
           </section>
           <AccountSecurity
             email={state?.user?.email}

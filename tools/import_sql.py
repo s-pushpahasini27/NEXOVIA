@@ -1,6 +1,7 @@
 """Import a trusted Nexovia SQL dump into a fresh local data directory."""
 import argparse
 import os
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -34,8 +35,15 @@ def main():
             db.execute('DELETE FROM auth_rate_limits')
             db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)')
             for migration in sorted((ROOT/'backend/migrations').glob('*.sql')):
-                if migration.name.startswith('0002') and not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='google_identities'").fetchone():
-                    db.executescript(migration.read_text())
+                sql = migration.read_text()
+                tables = re.findall(r'CREATE (?:VIRTUAL )?TABLE\s+`?(\w+)`?', sql, re.I)
+                columns = re.findall(r'ALTER TABLE\s+`?(\w+)`?\s+ADD COLUMN\s+`?(\w+)`?', sql, re.I)
+                present = [bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()) for table in tables]
+                present += [column in {r[1] for r in db.execute(f'PRAGMA table_info({table})')} for table,column in columns]
+                if present and not any(present):
+                    db.executescript(sql)
+                elif not present or not all(present):
+                    raise ValueError(f'Partially applied or unsupported migration: {migration.name}. The original export was not changed.')
                 db.execute('INSERT OR IGNORE INTO schema_migrations VALUES (?)', (migration.name,))
         temporary.replace(target)
         print(f'Imported database: {target}\nCopy uploaded files into data/uploads, then start Nexovia and log in again.')

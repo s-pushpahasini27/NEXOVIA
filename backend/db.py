@@ -39,8 +39,11 @@ def initialize():
         db.execute('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)')
         for file in sorted((ROOT / 'backend/migrations').glob('*.sql')):
             if not db.execute('SELECT 1 FROM schema_migrations WHERE name=?', (file.name,)).fetchone():
-                db.executescript('BEGIN;\n' + file.read_text() + '\nCOMMIT;')
-                db.execute('INSERT INTO schema_migrations VALUES (?)', (file.name,))
+                name = file.name.replace("'", "''")
+                db.executescript('BEGIN;\n' + file.read_text() + "\nINSERT INTO schema_migrations VALUES ('" + name + "');\nCOMMIT;")
+        from .retrieval import index_resource
+        for resource in rows(db, "SELECT * FROM resources WHERE content<>'' AND deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM resource_chunks WHERE resource_id=resources.id)"):
+            index_resource(db, resource)
 
 def one(db, sql, *params):
     row = db.execute(sql, params).fetchone()

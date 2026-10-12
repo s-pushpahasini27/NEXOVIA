@@ -6,6 +6,9 @@ import {AuthScreen,ProfileSetup} from './app/auth-ui';
 import {AppTheme} from './app/theme-ui';
 import './app/globals.css';
 import './app/theme.css';
+import './app/identity.css';
+import './app/landing.css';
+import './app/workspace-refinement.css';
 
 function App(){
  const [session,setSession]=useState<any>(null),[error,setError]=useState('');
@@ -17,12 +20,12 @@ function App(){
  if(user){
   const target=user.profileComplete?'/workspace':'/onboarding';
   if(path!==target){location.replace(target+location.hash);return null;}
-  if(!user.profileComplete)return <ProfileSetup profile={session.profile}/>;
+  if(!user.profileComplete)return <ProfileSetup userId={user.userId} profile={{...session.profile,email:user.email,googleAccount:!user.hasPassword}}/>;
   const closed=document.cookie.split(';').some(c=>c.trim()==='sidebar_state=false');
   return <Nexovia sidebarDefaultOpen={!closed} googleEnabled={session.googleEnabled}/>;
  }
  if(path==='/workspace'||path==='/onboarding'){location.replace('/login');return null;}
- if(path==='/login'||path==='/signup')return <AuthScreen mode={path==='/login'?'login':'signup'} googleEnabled/>;
+ if(path==='/login'||path==='/signup')return <AuthScreen mode={path==='/login'?'login':'signup'} googleEnabled={session.googleEnabled} pendingVerification={session.verification}/>;
  return <Home googleEnabled={session.googleEnabled}/>;
 }
 createRoot(document.getElementById('root')!).render(<AppTheme><App/></AppTheme>);
