@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import { StudyVisual } from "@/app/study-visual";
 const MovingGradientButton = lazy(() => import("@/components/originkit/moving-gradient-button"));
 import {Avatar} from './profile-fields';
+import {postFile} from './file-upload';
 
 const initials = (value: string) =>
   (value || "N")
@@ -169,14 +170,7 @@ export function AssistantPlus({ state, act, busy }: any) {
     if (!file || uploading) return;
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("ocr", "false");
-      form.append("nativePdf", "false");
-      const response = await fetch("/api/files", {
-        method: "POST",
-        body: form,
-      });
+      const response = await postFile('files', file, {ocr: 'false', nativePdf: 'false'});
       const data = await response
         .json()
         .catch(() => ({ error: "The server returned an invalid response." }));
@@ -624,14 +618,7 @@ export function CommunityPlus({ state, act, go, busy, load, onCall }: any) {
     if (!file || !chatPeer || chatUploading) return;
     setChatUploading(true);
     try {
-      const form = new FormData();
-      form.append("peer", chatPeer.id);
-      form.append("file", file);
-      if (message.trim()) form.append("caption", message.trim());
-      const response = await fetch("/api/chat-files", {
-        method: "POST",
-        body: form,
-      });
+      const response = await postFile('chat-files', file, {peer: chatPeer.id, ...(message.trim() ? {caption: message.trim()} : {})});
       const data = await response
         .json()
         .catch(() => ({ error: "The server returned an invalid response." }));

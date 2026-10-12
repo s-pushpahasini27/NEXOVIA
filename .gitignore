@@ -10,6 +10,8 @@ frontend/.pnpm-store/
 .preview*/
 .verify*/
 .pytest-*/
+.deps/
+.local-test-data/
 .vercel
 .env*
 !.env.example

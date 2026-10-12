@@ -4,7 +4,7 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
-from .db import one, rows, insert, now, uid, dump
+from .db import one, rows, insert, now, uid, dump, cloud_database
 from .study import (today, add_days, valid_date, minutes, clock, integer, capacity,
                     current_minutes, schedule, validate_tasks, conflicts)
 from . import gemini, retrieval, visuals
@@ -149,7 +149,8 @@ def state(db, user):
         result[key] = rows(db, f'SELECT * FROM {table} WHERE user_id=?{extra} ORDER BY created {order} LIMIT {limit}', u)
     result['trashedResources'] = rows(db, 'SELECT id,title,deleted_at FROM resources WHERE user_id=? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC', u)
     result['decks'] = [{**d, 'cards': json.loads(d['cards'])} for d in result['decks']]
-    result['history'] = [{**m, 'sources': json.loads(m['sources']), 'visual':json.loads(m['visual']) if m['visual'] else None} for m in rows(db, 'SELECT * FROM tutor_messages WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 100', u)[::-1]]
+    history_order = 'sequence' if cloud_database() else 'rowid'
+    result['history'] = [{**m, 'sources': json.loads(m['sources']), 'visual':json.loads(m['visual']) if m['visual'] else None} for m in rows(db, f'SELECT * FROM tutor_messages WHERE user_id=? ORDER BY created DESC,{history_order} DESC LIMIT 100', u)[::-1]]
     result['imageConfigured'] = bool(gemini.enabled() and os.getenv('GEMINI_IMAGE_MODEL','').strip())
     schedules = rows(db, 'SELECT * FROM card_schedule WHERE user_id=?', u)
     by_card = {(s['deck_id'], s['card']): s for s in schedules}

@@ -1,7 +1,8 @@
 """Validated study diagrams and owner-scoped Gemini image assets."""
 import json
 from . import gemini, retrieval
-from .db import uid, now, insert, data_dir
+from .db import uid, now, insert
+from . import storage
 
 def create(db, user_id, question, kind, resource_id=None, native_pdf=False):
     if kind not in ('diagram','image'):
@@ -39,12 +40,10 @@ def create(db, user_id, question, kind, resource_id=None, native_pdf=False):
     mime, data = gemini.image(prompt)
     image_id = uid()
     key = user_id+'/'+image_id
-    path = data_dir()/'visuals'/key
-    path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_bytes(data)
+    storage.save('visuals', key, data, mime)
     try:
         insert(db,'study_visuals',id=image_id,user_id=user_id,mime=mime,file_key=key,created=now())
     except Exception:
-        path.unlink(missing_ok=True)
+        storage.remove('visuals', key)
         raise
     return explanation, {'kind':'image','url':'/api/visuals?id='+image_id,'alt':question}

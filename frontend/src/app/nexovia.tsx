@@ -78,6 +78,7 @@ import { Progress } from "@/components/ui/progress";
 import { Toaster, toast } from "sonner";
 import { RealtimeCall } from './realtime-call';
 import {Avatar,ProfilePicturePicker,SkillPicker} from './profile-fields';
+import {postFile} from './file-upload';
 import { api } from "@/lib/client";
 import { AccountSecurity } from "./auth-ui";
 import { ThemeToggle, UserGreeting } from "./theme-ui";
@@ -1897,10 +1898,7 @@ function Resources({ state, act, load, busy }: any) {
     if (!file) return;
     setUploading(true);
     try {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("topic", topic);
-      const r = await fetch("/api/files", { method: "POST", body: form });
+      const r = await postFile('files', file, {topic});
       const data: any = await r.json();
       if (data.error) throw Error(data.error);
       toast.success(data.note);

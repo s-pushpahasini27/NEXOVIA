@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import time
+import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -15,7 +16,7 @@ from .web import NexoviaApp, HTTPException, Request, FileResponse, JSONResponse,
 from pypdf import PdfReader, PdfWriter
 from starlette.concurrency import run_in_threadpool
 from .db import ROOT, database, initialize, data_dir, one, rows, insert, uid, now, dump
-from . import auth, google, workspace, gemini, retrieval, ai_limits, email_verification, call_history, profile_photos
+from . import auth, google, workspace, gemini, retrieval, ai_limits, email_verification, call_history, profile_photos, storage
 
 load_dotenv(ROOT / '.env.local')
 load_dotenv(ROOT / '.env')
@@ -50,6 +51,8 @@ async def protections(request, call_next):
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
         origin = request.headers.get('origin', '')
         allowed = {os.getenv('APP_ORIGIN', 'http://127.0.0.1:8000').rstrip('/')}
+        if os.getenv('VERCEL') == '1':
+            allowed.add(f"https://{request.headers.get('host', '')}")
         if os.getenv('ALLOW_LOCAL_DEV', 'true').lower() == 'true' and not auth.secure():
             allowed.update(f'http://{h}:{p}' for h in ('localhost', '127.0.0.1') for p in (8000, 5173))
         if origin not in allowed:
@@ -131,6 +134,36 @@ def file_text(ext, content, ocr=False, native_pdf=False):
     except Exception as exc:
         raise ValueError('This PDF could not be read. Try another PDF, TXT or Markdown file.') from exc
 
+async def uploaded_file(request, category, user_id):
+    """Receive small local uploads or a private Blob uploaded directly by the browser."""
+    if request.headers.get('content-type', '').startswith('application/json'):
+        if not storage.blob_mode():
+            raise ValueError('Direct uploads are available only on the hosted app.')
+        fields = await body(request, 16000)
+        key = fields.get('blobPath', '')
+        if not isinstance(key, str) or not re.fullmatch(rf'{category}/{re.escape(user_id)}/[a-f0-9-]{{36}}', key):
+            raise ValueError('Invalid uploaded file reference.')
+        try:
+            content = await run_in_threadpool(storage.read, category, key.removeprefix(category + '/'))
+        except (FileNotFoundError, KeyError, httpx.HTTPError) as exc:
+            raise ValueError('Uploaded file is unavailable. Please retry.') from exc
+        filename = fields.get('filename', '')
+        if not isinstance(filename, str):
+            raise ValueError('Invalid filename.')
+        stored_key = key.removeprefix(category + '/')
+    else:
+        async with request.form(max_files=1, max_fields=5, max_part_size=11 * 1024 * 1024) as fields:
+            file = fields.get('file')
+            if not hasattr(file, 'read'):
+                raise ValueError('Choose a file up to 10 MB.')
+            content = await file.read(10 * 1024 * 1024 + 1)
+            filename = file.filename or ''
+            fields = dict(fields)
+        stored_key = None
+    if not content or len(content) > 10 * 1024 * 1024:
+        raise ValueError('Choose a non-empty file up to 10 MB.')
+    return content, filename, fields, stored_key
+
 @app.get('/api/health')
 def health():
     return {'ok': True, 'backend': 'python'}
@@ -179,10 +212,10 @@ def profile_picture(request: Request, profile_id: str):
         if profile_id != viewer['userId'] and not profile['discoverable'] and not one(db, '''SELECT 1 AS linked FROM connections WHERE status='accepted'
             AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))''', viewer['userId'], profile_id, profile_id, viewer['userId']):
             raise HTTPException(404, 'Picture not found.')
-        path = profile_photos.path(profile_id)
-        if not path.is_file():
+        try:
+            return storage.response('profile_pictures', f'{profile_id}.webp', media_type='image/webp')
+        except FileNotFoundError:
             raise HTTPException(404, 'Picture not found.')
-        return FileResponse(path, media_type='image/webp', headers={'Cache-Control':'private, no-store'})
 
 @app.get('/api/workspace')
 def get_workspace(request: Request):
@@ -218,40 +251,33 @@ def google_callback(request: Request):
 async def upload(request: Request):
     with database() as db:
         user = auth.session_user(db, request, required=True, complete=True)
-        async with request.form(max_files=1, max_fields=5, max_part_size=11 * 1024 * 1024) as form:
-            file = form.get('file')
-            if not hasattr(file, 'read'):
-                raise ValueError('Choose a non-empty PDF, TXT or Markdown file up to 10 MB.')
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if not content or len(content) > 10 * 1024 * 1024:
-                raise ValueError('Choose a non-empty PDF, TXT or Markdown file up to 10 MB.')
-            ext = (file.filename or '').rsplit('.', 1)[-1].lower()
-            if ext not in ('pdf', 'txt', 'md'):
-                raise ValueError('Supported files: PDF, TXT and Markdown.')
-            if ext == 'pdf' and not content.startswith(b'%PDF-'):
-                raise ValueError('This is not a valid PDF file.')
-            use_ocr = form.get('ocr') == 'true'
-            native_pdf = form.get('nativePdf') == 'true'
-            if use_ocr and gemini.enabled():
-                ai_limits.reserve(db, user['userId'], units=10)
-            extracted = await run_in_threadpool(file_text, ext, content, use_ocr,native_pdf)
-            file_id = uid()
-            key = user['userId'] + '/' + file_id
-            path = data_dir() / 'uploads' / key
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            try:
-                insert(db, 'resources', id=file_id, user_id=user['userId'], title=(file.filename or 'notes')[:200], topic=str(form.get('topic', ''))[:200], url='/api/files?id=' + file_id, kind=ext, file_key=key, content=extracted, created=now())
-                retrieval.index_resource(db, one(db, 'SELECT * FROM resources WHERE id=?', file_id))
-                db.commit()
-            except Exception:
-                path.unlink(missing_ok=True)
-                raise
+        content, filename, form, uploaded_key = await uploaded_file(request, 'uploads', user['userId'])
+        ext = filename.rsplit('.', 1)[-1].lower()
+        if ext not in ('pdf', 'txt', 'md'):
+            raise ValueError('Supported files: PDF, TXT and Markdown.')
+        if ext == 'pdf' and not content.startswith(b'%PDF-'):
+            raise ValueError('This is not a valid PDF file.')
+        use_ocr = form.get('ocr') == 'true'
+        native_pdf = form.get('nativePdf') == 'true'
+        if use_ocr and gemini.enabled():
+            ai_limits.reserve(db, user['userId'], units=10)
+        extracted = await run_in_threadpool(file_text, ext, content, use_ocr,native_pdf)
+        file_id = uid()
+        key = uploaded_key or user['userId'] + '/' + file_id
+        if not uploaded_key:
+            storage.save('uploads', key, content, 'application/pdf' if ext == 'pdf' else 'text/plain')
+        try:
+            insert(db, 'resources', id=file_id, user_id=user['userId'], title=(filename or 'notes')[:200], topic=str(form.get('topic', ''))[:200], url='/api/files?id=' + file_id, kind=ext, file_key=key, content=extracted, created=now())
+            retrieval.index_resource(db, one(db, 'SELECT * FROM resources WHERE id=?', file_id))
+            db.commit()
+        except Exception:
+            storage.remove('uploads', key)
+            raise
     return {
         'ok': True,
         'resource': {
             'id': file_id,
-            'title': (file.filename or 'notes')[:200],
+            'title': (filename or 'notes')[:200],
             'topic': str(form.get('topic', ''))[:200],
             'url': '/api/files?id=' + file_id,
             'kind': ext,
@@ -268,11 +294,10 @@ def study_visual(request: Request, id: str = ''):
         item = one(db,'SELECT * FROM study_visuals WHERE id=? AND user_id=?',id,user['userId'])
     if not item:
         raise HTTPException(404,'Not found')
-    root = (data_dir()/'visuals').resolve()
-    path = (root/item['file_key']).resolve()
-    if not path.is_relative_to(root) or not path.is_file():
+    try:
+        return storage.response('visuals', item['file_key'], media_type=item['mime'])
+    except FileNotFoundError:
         raise HTTPException(404,'Not found')
-    return FileResponse(path,media_type=item['mime'])
 
 @app.get('/api/files')
 def download(request: Request, id: str = ''):
@@ -281,61 +306,53 @@ def download(request: Request, id: str = ''):
         resource = one(db, 'SELECT * FROM resources WHERE id=? AND user_id=? AND deleted_at IS NULL', id, user['userId'])
         if not resource or not resource['file_key']:
             raise HTTPException(404, 'Not found')
-        root = (data_dir() / 'uploads').resolve()
-        path = (root / resource['file_key']).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
+        try:
+            return storage.response('uploads', resource['file_key'], filename=re.sub(r'[^a-zA-Z0-9._ -]', '_', resource['title']), media_type='application/pdf' if resource['kind'] == 'pdf' else 'text/plain; charset=utf-8')
+        except FileNotFoundError:
             raise HTTPException(404, 'Not found')
-        return FileResponse(path, filename=re.sub(r'[^a-zA-Z0-9._ -]', '_', resource['title']), media_type='application/pdf' if resource['kind'] == 'pdf' else 'text/plain; charset=utf-8')
 
 @app.post('/api/chat-files')
 async def upload_chat_file(request: Request):
     with database() as db:
         user = auth.session_user(db, request, required=True, complete=True)
-        async with request.form(max_files=1, max_fields=5, max_part_size=11 * 1024 * 1024) as form:
-            peer = str(form.get('peer', ''))
-            if not one(db, "SELECT id FROM connections WHERE status='accepted' AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))", user['userId'], peer, peer, user['userId']):
-                raise ValueError('Connect with this learner before sharing files.')
-            file = form.get('file')
-            if not hasattr(file, 'read'):
-                raise ValueError('Choose a file up to 10 MB.')
-            content = await file.read(10 * 1024 * 1024 + 1)
-            if not content or len(content) > 10 * 1024 * 1024:
-                raise ValueError('Choose a non-empty file up to 10 MB.')
-            title = (file.filename or 'attachment')[:200]
-            ext = title.rsplit('.', 1)[-1].lower()
-            media = {
-                'pdf': 'application/pdf', 'txt': 'text/plain; charset=utf-8',
-                'md': 'text/markdown; charset=utf-8', 'png': 'image/png',
-                'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp',
-            }
-            if ext not in media:
-                raise ValueError('Supported chat files: PDF, TXT, Markdown, PNG, JPG and WebP.')
-            valid_signature = (
-                ext not in ('pdf', 'png', 'jpg', 'jpeg', 'webp')
-                or (ext == 'pdf' and content.startswith(b'%PDF-'))
-                or (ext == 'png' and content.startswith(b'\x89PNG\r\n\x1a\n'))
-                or (ext in ('jpg', 'jpeg') and content.startswith(b'\xff\xd8\xff'))
-                or (ext == 'webp' and len(content) >= 12 and content[:4] == b'RIFF' and content[8:12] == b'WEBP')
-            )
-            if not valid_signature:
-                raise ValueError('The selected file does not match its extension.')
-            message_id = uid()
-            key = user['userId'] + '/' + message_id
-            path = data_dir() / 'chat_uploads' / key
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            caption = workspace.text(form.get('caption'), 4000)
-            try:
-                insert(db, 'messages', id=message_id, sender=user['userId'], recipient=peer,
-                       body=caption, created=now(), attachment_name=title,
-                       attachment_kind=ext, attachment_key=key, attachment_size=len(content))
-                sender = one(db, 'SELECT name FROM profiles WHERE id=?', user['userId'])
-                workspace.notify(db, peer, 'message', f"New file from {sender['name']}",
-                                 caption or f'Shared {title}', f"community:{user['userId']}", message_id)
-                db.commit()
-            except Exception:
-                path.unlink(missing_ok=True)
-                raise
+        content, filename, form, uploaded_key = await uploaded_file(request, 'chat_uploads', user['userId'])
+        peer = str(form.get('peer', ''))
+        if not one(db, "SELECT id FROM connections WHERE status='accepted' AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))", user['userId'], peer, peer, user['userId']):
+            raise ValueError('Connect with this learner before sharing files.')
+        title = (filename or 'attachment')[:200]
+        ext = title.rsplit('.', 1)[-1].lower()
+        media = {
+            'pdf': 'application/pdf', 'txt': 'text/plain; charset=utf-8',
+            'md': 'text/markdown; charset=utf-8', 'png': 'image/png',
+            'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp',
+        }
+        if ext not in media:
+            raise ValueError('Supported chat files: PDF, TXT, Markdown, PNG, JPG and WebP.')
+        valid_signature = (
+            ext not in ('pdf', 'png', 'jpg', 'jpeg', 'webp')
+            or (ext == 'pdf' and content.startswith(b'%PDF-'))
+            or (ext == 'png' and content.startswith(b'\x89PNG\r\n\x1a\n'))
+            or (ext in ('jpg', 'jpeg') and content.startswith(b'\xff\xd8\xff'))
+            or (ext == 'webp' and len(content) >= 12 and content[:4] == b'RIFF' and content[8:12] == b'WEBP')
+        )
+        if not valid_signature:
+            raise ValueError('The selected file does not match its extension.')
+        message_id = uid()
+        key = uploaded_key or user['userId'] + '/' + message_id
+        if not uploaded_key:
+            storage.save('chat_uploads', key, content, media[ext])
+        caption = workspace.text(form.get('caption'), 4000)
+        try:
+            insert(db, 'messages', id=message_id, sender=user['userId'], recipient=peer,
+                   body=caption, created=now(), attachment_name=title,
+                   attachment_kind=ext, attachment_key=key, attachment_size=len(content))
+            sender = one(db, 'SELECT name FROM profiles WHERE id=?', user['userId'])
+            workspace.notify(db, peer, 'message', f"New file from {sender['name']}",
+                             caption or f'Shared {title}', f"community:{user['userId']}", message_id)
+            db.commit()
+        except Exception:
+            storage.remove('chat_uploads', key)
+            raise
     return {'ok': True, 'messageId': message_id, 'note': 'File sent.'}
 
 @app.get('/api/chat-files')
@@ -346,15 +363,14 @@ def download_chat_file(request: Request, id: str = ''):
             AND (sender=? OR recipient=?)''', id, user['userId'], user['userId'])
         if not message:
             raise HTTPException(404, 'Not found')
-        root = (data_dir() / 'chat_uploads').resolve()
-        path = (root / message['attachment_key']).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
-            raise HTTPException(404, 'Not found')
         media = {'pdf': 'application/pdf', 'txt': 'text/plain; charset=utf-8',
                  'md': 'text/markdown; charset=utf-8', 'png': 'image/png',
                  'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'webp': 'image/webp'}
         filename = re.sub(r'[^a-zA-Z0-9._ -]', '_', message['attachment_name'])
-        return FileResponse(path, filename=filename, media_type=media.get(message['attachment_kind'], 'application/octet-stream'), content_disposition_type='attachment')
+        try:
+            return storage.response('chat_uploads', message['attachment_key'], filename=filename, media_type=media.get(message['attachment_kind'], 'application/octet-stream'))
+        except FileNotFoundError:
+            raise HTTPException(404, 'Not found')
 
 def expire_calls(db):
     ringing_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat(timespec='milliseconds').replace('+00:00', 'Z')

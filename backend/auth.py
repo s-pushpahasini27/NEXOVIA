@@ -15,7 +15,7 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 def secure():
-    return os.getenv('APP_ORIGIN', 'http://127.0.0.1:8000').startswith('https://')
+    return os.getenv('VERCEL') == '1' or os.getenv('APP_ORIGIN', 'http://127.0.0.1:8000').startswith('https://')
 
 def hash_password(password):
     salt = secrets.token_hex(16)

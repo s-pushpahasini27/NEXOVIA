@@ -1,7 +1,8 @@
 """Owner-scoped, persistent full-text retrieval. This is lexical RAG, not embeddings."""
 import json
 import re
-from .db import rows, one, data_dir
+from .db import rows, one, cloud_database
+from . import storage
 from . import gemini
 from .study import today
 
@@ -32,6 +33,14 @@ def retrieve(db, user_id, question, resource_id=None, native_pdf=False):
     if not words:
         return []
     match = ' OR '.join('"' + word + '"' for word in words)
+    if cloud_database():
+        return rows(db, '''SELECT c.id,c.resource_id,c.ordinal,c.content,r.title,r.url
+            FROM resource_chunks c JOIN resources r ON r.id=c.resource_id
+            WHERE to_tsvector('simple',c.content) @@ plainto_tsquery('simple',?)
+            AND c.user_id=? AND r.user_id=? AND r.deleted_at IS NULL
+            AND (? IS NULL OR c.resource_id=?)
+            ORDER BY ts_rank(to_tsvector('simple',c.content),plainto_tsquery('simple',?)) DESC,c.id LIMIT 6''',
+            question,user_id,user_id,resource_id,resource_id,question)
     return rows(db, '''SELECT c.id,c.resource_id,c.ordinal,c.content,r.title,r.url
         FROM resource_search JOIN resource_chunks c ON c.id=resource_search.rowid
         JOIN resources r ON r.id=c.resource_id
@@ -40,7 +49,8 @@ def retrieve(db, user_id, question, resource_id=None, native_pdf=False):
         match,user_id,user_id,resource_id,resource_id)
 
 def context(db, user_id, question, resource_id=None, native_pdf=False):
-    history = rows(db, 'SELECT role,body FROM tutor_messages WHERE user_id=? ORDER BY created DESC,rowid DESC LIMIT 12', user_id)[::-1]
+    history_order = 'sequence' if cloud_database() else 'rowid'
+    history = rows(db, f'SELECT role,body FROM tutor_messages WHERE user_id=? ORDER BY created DESC,{history_order} DESC LIMIT 12', user_id)[::-1]
     search = question
     if re.search(r'\b(it|that|this|those|more|example|continue)\b', question, re.I):
         previous = next((h['body'] for h in reversed(history) if h['role']=='user'), '')
@@ -50,11 +60,11 @@ def context(db, user_id, question, resource_id=None, native_pdf=False):
         resource = one(db, 'SELECT * FROM resources WHERE id=? AND user_id=? AND deleted_at IS NULL', resource_id,user_id)
         if not resource or resource['kind']!='pdf' or not resource['file_key']:
             raise ValueError('Select your uploaded PDF to use original-document understanding.')
-        root = (data_dir()/'uploads').resolve()
-        path = (root/resource['file_key']).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
+        try:
+            original = storage.read('uploads', resource['file_key'])
+        except FileNotFoundError:
             raise ValueError('The original PDF is unavailable. Upload it again.')
-        attachment = ('application/pdf',path.read_bytes())
+        attachment = ('application/pdf', original)
     sources = retrieve(db, user_id, search, resource_id, native_pdf)
     mastery = rows(db, 'SELECT topic,SUM(score)*1.0/SUM(total) AS accuracy,COUNT(*) AS attempts FROM attempts WHERE user_id=? GROUP BY topic ORDER BY accuracy LIMIT 10', user_id)
     # The tutor gets a compact, owner-scoped view of upcoming work.  Unlike

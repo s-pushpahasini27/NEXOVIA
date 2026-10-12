@@ -6,7 +6,7 @@ import re
 import secrets
 import time
 from .web import HTTPException, JSONResponse
-from .db import data_dir, one, insert, uid, now
+from .db import data_dir, one, insert, uid, now, cloud_database
 from . import mailer
 
 COOKIE = 'nexovia_email_challenge'
@@ -20,6 +20,8 @@ def _secret():
         if len(value)<32:
             raise RuntimeError('AUTH_OTP_SECRET must contain at least 32 characters.')
         return value.encode()
+    if cloud_database():
+        raise RuntimeError('Set AUTH_OTP_SECRET in the Vercel project environment before enabling email verification.')
     path = data_dir()/'secrets'/'otp.key'
     path.parent.mkdir(parents=True,exist_ok=True)
     try:

@@ -7,3 +7,5 @@ httpx==0.28.1
 pypdf==6.10.0
 tzdata==2026.2
 Pillow==12.3.0
+pg8000==1.31.5
+vercel==0.10.0

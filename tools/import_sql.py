@@ -6,6 +6,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from contextlib import closing
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ def main():
     os.close(handle)
     temporary = Path(name)
     try:
-        with sqlite3.connect(temporary) as db:
+        with closing(sqlite3.connect(temporary)) as db, db:
             db.executescript(args.sql_dump.read_text(encoding='utf-8-sig'))
             for table, columns in {'profiles':['id','name'], 'plans':['id','user_id','input'], 'tasks':['id','plan_id','user_id'], 'auth_accounts':['id','email','password_hash'], 'resources':['id','file_key']}.items():
                 available = {row[1] for row in db.execute(f'PRAGMA table_info({table})')}

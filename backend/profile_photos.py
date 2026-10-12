@@ -6,6 +6,7 @@ import logging
 import httpx
 from PIL import Image, UnidentifiedImageError
 from .db import data_dir, now
+from . import storage
 
 MAX_BYTES = 2 * 1024 * 1024
 
@@ -23,12 +24,7 @@ def save(db, user_id, content, source='upload'):
             cleaned.save(output, format='WEBP', quality=85)
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise ValueError('The selected image could not be read.') from exc
-    root = data_dir() / 'profile_pictures'
-    root.mkdir(parents=True, exist_ok=True)
-    path = root / f'{user_id}.webp'
-    temporary = root / f'{user_id}.tmp'
-    temporary.write_bytes(output.getvalue())
-    temporary.replace(path)
+    storage.save('profile_pictures', f'{user_id}.webp', output.getvalue(), 'image/webp')
     db.execute('UPDATE profiles SET avatar_source=?,avatar_updated=? WHERE id=?', (source, now(), user_id))
 
 

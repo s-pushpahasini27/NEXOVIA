@@ -28,6 +28,10 @@ class NexoviaApp(Starlette):
                     args.append(request)
                 elif parameter.name in request.path_params:
                     args.append(request.path_params[parameter.name])
+                elif parameter.name in request.query_params:
+                    args.append(request.query_params[parameter.name])
+                elif parameter.default is not inspect.Parameter.empty:
+                    args.append(parameter.default)
                 else:
                     raise TypeError(f"No value is available for route argument {parameter.name!r}.")
             if inspect.iscoroutinefunction(endpoint):
