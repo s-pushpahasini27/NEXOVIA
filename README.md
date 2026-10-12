@@ -160,3 +160,5 @@ Implementation references: [Starlette application documentation](https://www.sta
 ## Vercel deployment
 
 The Vercel build serves the React interface and Python API from one project. Configure Production environment variables for `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `GEMINI_API_KEY`, `AUTH_OTP_SECRET`, and the `SMTP_*` mail settings before using live signup and AI features. A coturn-compatible relay can be added with `TURN_URLS` and `TURN_SECRET` for reliable calls across networks. Keep all secrets in Vercel, never in Git.
+
+The Vercel install step runs `npm ci` at the repository root and in `frontend/`, using both committed lockfiles.
