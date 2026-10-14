@@ -1,108 +1,83 @@
-# NEXOVIA — standalone Python edition
+# Nexovia
 
-The existing Nexovia interface, with a Python ASGI backend and a local SQLite database. No ChatGPT, Cowork, Cloudflare account, or Node server is needed to run the included build.
+Nexovia is a study workspace for planning, learning, practicing, and tracking progress in one place. Its React interface is served by a Python ASGI application locally and deployed alongside the Python API on Vercel. The included `frontend/dist` build lets you run the app locally without installing Node.js; Node.js is needed only to change or rebuild the interface.
 
-**The backend is Python.** The browser interface remains React + TypeScript + CSS to preserve the same design, animations, themes, and interactions. It is not a Python desktop GUI. The compiled interface is included in `frontend/dist`.
+## Features
 
-## Start on Windows in VS Code
+| Area | What it does |
+| --- | --- |
+| Study planner | Creates deadline-aware schedules from subjects, priorities, difficulty, and available time. Choose the rules-based scheduler or Gemini-assisted prioritization; preview, edit, save, archive, and restore plans. |
+| AI study assistant | Answers questions with Gemini, can use your saved notes as context, and can answer questions about your upcoming saved schedule. Notes-based answers validate source references; AI can still make mistakes. |
+| Study sessions | Provides a focus timer, records actual study time, and supports task completion, snoozing, and missed-session recovery. |
+| Practice and analytics | Generates quizzes and flashcards, supports manual cards and spaced review, and displays study history, goals, and progress insights. |
+| Resources and visuals | Stores private PDF, TXT, and Markdown notes for retrieval. Optional AI OCR, original-PDF understanding, study diagrams, and image generation depend on the configured Gemini model and feature settings. |
+| Community | Offers opt-in learner discovery, connection requests, private messages and attachments, notifications, and peer-to-peer audio/video calls with call history. |
+| Accounts and interface | Includes email/password signup with email verification, optional Google sign-in, onboarding, profile settings, responsive light/dark layouts, and reduced-motion support. |
 
-1. Install Python **3.12 or newer**. Enable “Add Python to PATH” during installation.
-2. Extract the ZIP. In VS Code choose **File → Open Folder → NEXOVIA-Python**. Do not open the files inside the ZIP without extracting them.
-3. Open **Terminal → New Terminal** and run:
+Gemini-backed features require a valid API key and model access; they do not silently substitute sample results when the provider fails. Calls require both users to be connected, media permissions, and HTTPS or localhost. A TURN relay is recommended for calls across restrictive networks; none is supplied by this repository.
+
+## Tech stack
+
+- **Frontend:** React 19, TypeScript, Vite 8, CSS/Tailwind, Framer Motion, and UI components based on Radix/Base UI.
+- **Backend:** Python, Starlette ASGI, Uvicorn, and server-side Gemini REST requests.
+- **Data:** SQLite and private files in `data/` locally; PostgreSQL via `DATABASE_URL` and private Vercel Blob in the Vercel deployment.
+- **Integrations:** SMTP for email verification, optional Google OAuth, browser WebRTC for calls, and optional coturn-compatible TURN.
+- **Hosting:** Vercel serves `frontend/dist`, a Python API Function, and a Node upload-token Function.
+
+## Project structure
+
+```text
+.
+├── run.py                    # Local Python server
+├── api/
+│   ├── index.py              # Vercel Python API entry point
+│   └── blob-token.js         # Authenticated direct-upload tokens
+├── backend/                  # API, auth, planner, AI, calls, storage, data
+│   └── migrations/           # Local SQLite schema migrations
+├── frontend/
+│   ├── src/                  # React and TypeScript source
+│   ├── dist/                 # Committed ready-to-run build
+│   └── package.json          # Frontend scripts and dependencies
+├── tests/                    # Python regression tests
+├── requirements.txt          # Python runtime dependencies
+├── requirements-dev.txt      # Python test dependencies
+├── .env.example              # Server configuration template
+└── vercel.json               # Vercel build and route configuration
+```
+
+Additional setup details are in [`AUTH-SETUP.md`](AUTH-SETUP.md), [`AI-SETUP.md`](AI-SETUP.md), and [`MIGRATION.md`](MIGRATION.md).
+
+## Install and run locally
+
+Use Python **3.12 or newer**. Extract the repository first, then run these commands from its root. No PowerShell activation or execution-policy change is required.
+
+**Windows PowerShell**
 
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
 .\.venv\Scripts\python.exe run.py
 ```
 
-4. Open **http://127.0.0.1:8000** in your browser.
-5. Configure email delivery as described in `AUTH-SETUP.md`, create an account, verify its email code, and complete your profile. Stop the server with **Ctrl+C**.
+If `py` is unavailable, use `python` for the first command.
 
-Next time, run only:
-
-```powershell
-.\.venv\Scripts\python.exe run.py
-```
-
-These commands do not require PowerShell activation or an execution-policy change. If `py` is unavailable, use `python` for the first command. You can also install the Microsoft Python extension in VS Code, select the `.venv` interpreter, and run the included “Run Nexovia Python” debug configuration.
-
-This build uses Starlette directly and intentionally does **not** install Pydantic Core. That avoids the native Pydantic DLL that some Windows Application Control policies block. If you are replacing an earlier Nexovia download, delete its `.venv` folder before creating the new one above.
-
-## macOS / Linux
+**macOS / Linux**
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
 .venv/bin/python run.py
 ```
 
-Internet access is needed for the initial dependency installation, email verification, and live AI. Already-verified password accounts can log in and use local study features without external services. Google sign-in, external links, and downloaded Google Fonts need internet access; system fonts remain available offline.
+Open **http://127.0.0.1:8000** and stop the server with **Ctrl+C**. On later starts, run only the last command for your operating system. The server loads `.env.local` and `.env`; existing process environment variables take precedence.
 
-## Features preserved
+The app creates `data/nexovia.sqlite3` and private upload directories on first use. Keep `data/` when updating the code and back up the whole directory with the server stopped. A local installation does **not** automatically contain accounts or files from a hosted Nexovia deployment. To move local storage, set an absolute `NEXOVIA_DATA_DIR` in `.env`.
 
-| Area | Included behavior |
-| --- | --- |
-| Interface | Landing, login, signup, onboarding, workspace pages, responsive sidebar, light/dark themes, styled dynamic greeting, and reduced-motion support |
-| Accounts | Validated email/password signup and login, browser-bound email OTP verification, profile creation, password changes, logout, persistent 30-day cookie sessions, optional verified Google login/linking |
-| Planner | Date ranges, subjects, deadlines, priorities, difficulty, adaptive scheduling, preview/edit/save, multiple saved plans, archive restoration, conflict checks |
-| Study sessions | Focus timer, actual study minutes, completion, snooze, missed-task recovery, reminders |
-| Resources | Links, private PDF/TXT/Markdown uploads, optional scanned-PDF OCR, indexed passage retrieval, source citations, recoverable removal |
-| Practice | Live Gemini quizzes and flashcards, manual cards, server-side scoring, immutable submissions, due-date review scheduling |
-| Progress | Existing progress, goals, study history, insights and weak-topic displays |
-| Community | Opt-in discovery, categorized searchable B.Tech/engineering skill multi-select with custom skills, learner profile pictures, connection requests, private chat with call start/end history, voice input, file attachments, and peer-to-peer audio/video calls |
-| Notifications | Persisted connection/message/call alerts, unread counts, in-app popups, optional browser alerts while the app is open, study reminders |
-| Settings | Profile, weekly goal, preferences, account security, Google account connection when configured |
+### Develop the frontend
 
-The planner opens as a clean form with one blank subject row. Choose the rules-based scheduler or Gemini AI prioritization explicitly. Generated AI content is never replaced with sample questions or reference answers after a failure. A subtle app-wide particle background adapts to light and dark mode, reduces density on mobile, pauses in hidden tabs, and respects reduced-motion preferences.
-
-The AI planner, tutor, generated quizzes, and flashcards require a working `GEMINI_API_KEY`. Provider errors are displayed and invalid generations are not saved. Planning output is constrained to valid time slots and checked for deadlines, order and conflicts. The assistant's **+** button attaches text-based PDF, TXT, or Markdown notes; its microphone button uses browser speech recognition. Relevant passages from the owner's files are retrieved with SQLite full-text search and sent to Gemini; returned citation IDs are checked against those passages. This is lexical retrieval, not vector search, and citation validation does not guarantee factual correctness. Tutors use recorded quiz performance; new quizzes receive previous topic attempts to adapt difficulty. Scanned PDFs are not processed through the tutor interface. Community alerts work while the app is open. There is no background push or password-reset email. Email ownership is verified through configured SMTP delivery; see `AUTH-SETUP.md`. The assistant also supports validated study diagrams and optional generated images. Scheduling uses **Asia/Kolkata**; greetings use browser local time.
-
-Connected learners can choose audio-only or video calls from chat. The incoming-call listener stays mounted across workspace pages. Nexovia handles WebRTC signaling; media is not recorded. Browser media access requires localhost or HTTPS and permission from both participants. Configure an existing coturn-compatible relay with `TURN_URLS` and `TURN_SECRET` for restrictive networks. The server creates expiring per-user relay credentials without exposing the shared secret. Without TURN, the interface warns that some networks cannot connect. Both participants must use the same running Nexovia server. Real media transport and cross-network calls have not been verified in this environment.
-
-Call start and end entries appear in both participants' shared chat timeline with the call type, local display time and connected duration; unanswered/declined calls have zero connected duration. Pictures uploaded during onboarding or Settings are validated, resized and stored privately. Google profile pictures are copied from a verified Google image host when available; manually uploaded pictures take precedence. Only the profile owner, a discoverable profile's viewers, or accepted connections can retrieve a picture. Start-up applies migration `0012_call_history_profile_pictures.sql` to existing local databases without deleting data.
-
-## Where your local data is saved
-
-The first launch creates:
-
-- `data/nexovia.sqlite3` — accounts, profiles, plans, tasks, study sessions, resources, practice, and community data.
-- `data/uploads/` — private uploaded files.
-- `data/chat_uploads/` — private community-chat attachments available only to the sender and recipient.
-- `data/profile_pictures/` — private, resized profile pictures.
-- `data/visuals/` — private generated study images.
-- `data/secrets/otp.key` — private OTP signing key, generated only when `AUTH_OTP_SECRET` is unset.
-
-Data survives server restarts. Back up the **entire `data` folder with the server stopped**, including any SQLite auxiliary files. Keep it private: it contains your account and study information. Do not delete it when updating the code. To store data elsewhere, copy `.env.example` to `.env` and set an absolute `NEXOVIA_DATA_DIR`.
-
-**The download does not contain the hosted site's live user database or uploads.** Your existing hosted app remains unchanged. This local app starts with an empty database. Existing hosted data needs an authorized D1 SQL export and the associated uploaded files; the code alone cannot recover that data. The same table schema, identifiers, JSON fields, and scrypt password format are preserved. See `MIGRATION.md` for the import path. Do not sign up again expecting the hosted account to appear automatically.
-
-## Enable Google sign-in (optional)
-
-Email/password signup requires configured SMTP delivery and OTP verification. See `AUTH-SETUP.md`. To enable Google:
-
-1. In Google Cloud, create/configure an OAuth consent screen and an OAuth client of type **Web application**. Add test users if the consent screen is in testing mode.
-2. Add the exact authorized redirect URI:
-   `http://127.0.0.1:8000/api/auth/google/callback`
-3. Copy `.env.example` to `.env` in the project root. Fill in `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Keep the provided local redirect URI.
-4. Restart Python and use **Continue with Google**. New accounts go through profile creation; returning users open their workspace.
-
-Use the same hostname consistently: `localhost` and `127.0.0.1` are different cookie hosts and redirect URIs. For production, use your exact HTTPS domain for both `APP_ORIGIN` and the Google redirect URI. Never put the client secret in React code or commit `.env`.
-
-Google uses state, nonce, PKCE, signed short-lived flow cookies, and verified Google ID tokens. Existing Gmail/Google Workspace accounts can match verified identities; other email domains require logging in with the password and connecting Google in Settings. Real Google login must be tested with your credentials; the included automated checks use a mocked identity exchange and test the token verifier separately.
-
-## Enable Gemini AI (optional)
-
-1. Open [Google AI Studio](https://aistudio.google.com/app/apikey) and create an API key.
-2. Copy `.env.example` to `.env` in the project root.
-3. Put the key after `GEMINI_API_KEY=`. Do not add quotes or paste it into frontend code.
-4. Keep `GEMINI_MODEL=gemini-2.5-flash`, then restart `python run.py`.
-
-A key being present means configured, not verified. A successful tutor response is labeled with its stored Gemini provenance and supporting passages when available. If the key is missing or rejected, AI requests fail visibly without fabricated content. Rules-based planning and manual cards remain explicit independent features. Application-level hourly request limits are configurable; they do not guarantee free provider usage. No billing account, paid plan or external resource is created by this package. See `AI-SETUP.md` for setup and `VERIFICATION.md` for evidence and remaining checks.
-
-## Edit the interface
-
-Python serves the compiled UI. Only install Node.js **22.13+** if you want to edit/rebuild the React interface:
+Install Node.js **22.13 or newer** only when editing the interface. Keep the Python server running in one terminal; in another terminal run:
 
 ```bash
 cd frontend
@@ -110,55 +85,57 @@ npm ci
 npm run dev
 ```
 
-Keep `python run.py` running in another terminal. Open `http://127.0.0.1:5173`; Vite proxies `/api` to Python. Google callback configuration points to port 8000 by default, so that flow returns to the Python-served build.
+Open **http://127.0.0.1:5173**. Vite proxies `/api` to the Python server at port 8000. To refresh the interface served by Python at port 8000, run `npm run build` from `frontend/`; source changes alone do not update the committed build. The default Google OAuth callback points to port 8000.
 
-After editing, rebuild and restart Python:
+## Environment setup
 
-```bash
-cd frontend
-npm run build
-```
+Copy `.env.example` to `.env` for local use. Keep `.env`, passwords, and API keys out of Git and frontend code. For Vercel, add the same server settings in **Project Settings → Environment Variables** instead of uploading a local `.env` file.
 
-Changes to `frontend/src` do not appear on port 8000 until rebuilt. The app has no Next.js, Vinext, D1, R2, or ChatGPT runtime dependency.
-
-## Project files
-
-| Path | Purpose |
+| Setting | Purpose |
 | --- | --- |
-| `run.py` | Python server entry point |
-| `backend/main.py` | API routes, uploads, static frontend serving |
-| `backend/auth.py` | Passwords, sessions, rate limits |
-| `backend/google.py` | Google OpenID Connect |
-| `backend/study.py` | Deterministic scheduling and validation |
-| `backend/gemini.py`, `backend/retrieval.py` | Live AI client, owner-scoped retrieval and citation validation |
-| `backend/ai_limits.py` | Persisted request budgets |
-| `backend/workspace.py` | Study and community operations |
-| `backend/db.py`, `backend/migrations/` | SQLite persistence and original schema |
-| `frontend/src/app/` | Preserved React screens and CSS |
-| `frontend/src/components/` | Preserved UI components |
-| `frontend/dist/` | Ready-to-run compiled UI |
-| `tests/` | API and security regression tests |
+| `APP_ORIGIN` | Exact public origin (for example, `https://your-domain.example`) used for request-origin checks and OAuth setup; defaults to `http://127.0.0.1:8000` locally. |
+| `HOST`, `PORT`, `ALLOW_LOCAL_DEV` | Local server address/port and local development-origin allowance. Set `ALLOW_LOCAL_DEV=false` for production. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_TLS_MODE`, `SMTP_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Existing SMTP provider credentials for email verification. Password signup cannot complete without working email delivery. `starttls` on port 587 is the example default; use your provider's required settings. |
+| `AUTH_OTP_SECRET` | Long private OTP signing key (at least 32 characters). Locally the app can generate and persist one in `data/secrets/otp.key`; configure it explicitly for stateless/cloud hosting. |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Enable the AI planner, tutor, quizzes, flashcards, and applicable study visuals. The model defaults to `gemini-2.5-flash`; access must be verified with your provider account. |
+| `GEMINI_IMAGE_MODEL` | Optional image-capable Gemini model for generated study images; unset by default. The same `GEMINI_API_KEY` is used. Check model access and possible provider charges first. |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` | Optional Google sign-in. Register the exact callback URI `/api/auth/google/callback` with your Google OAuth web client. |
+| `TURN_URLS`, `TURN_SECRET` | Optional coturn-compatible relay URLs and shared secret for reliable WebRTC calls across networks. Without them, calls use public STUN and may fail. |
+| `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` | Required for persistent cloud data and private files on Vercel. `DATABASE_URL` selects PostgreSQL instead of local SQLite. |
+| `AI_REQUESTS_PER_USER_HOUR`, `AI_REQUESTS_PER_HOUR` | Application-side Gemini request limits. These are not provider billing limits. |
+
+For local email verification, fill in the SMTP settings and restart the server. For Google OAuth locally, use `http://127.0.0.1:8000/api/auth/google/callback` and keep the same hostname in your browser. For AI, create a Gemini API key in [Google AI Studio](https://aistudio.google.com/app/apikey), put it in `GEMINI_API_KEY`, restart, and test with a real tutor question. Never paste the key into a screenshot or commit it.
+
+## Usage
+
+1. Configure SMTP, start the server, sign up, verify the emailed code, and complete your profile. Alternatively, configure Google OAuth and use Google sign-in.
+2. In **Study planner**, enter subjects and available time, preview a rules-based or AI-prioritized schedule, then save it. Start a session, track time, and review progress.
+3. In **AI study assistant**, ask a concept question, attach saved notes when useful, or ask “What is my schedule tomorrow?” The tutor receives your upcoming active, incomplete planner tasks and uses **Asia/Kolkata** for relative schedule dates.
+4. Create quizzes or flashcards for practice. In **Community**, connect with another learner before messaging or calling.
+
+AI answers and OCR can be inaccurate. Review important study content and schedules before relying on them.
+
+## Deployment on Vercel
+
+`vercel.json` installs dependencies with `npm ci` at the repository root and in `frontend/`, builds with `npm run build` in `frontend/`, and serves `frontend/dist`. The Python API is exposed through `api/index.py`; `api/blob-token.js` authorizes direct browser uploads. Both package lockfiles are committed, so Vercel can use the configured `npm ci` commands.
+
+1. Import this GitHub repository into a Vercel project and keep the repository's `vercel.json` build settings. Use a Python runtime supported by your Vercel project and Node.js **22.13+** for the build.
+2. Provide a PostgreSQL database and private Vercel Blob store. Set `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` in the Vercel project. Vercel's ephemeral filesystem is **not** a substitute for these persistent services.
+3. Set `APP_ORIGIN` to the exact HTTPS production origin, `ALLOW_LOCAL_DEV=false`, and a stable `AUTH_OTP_SECRET`. Add the SMTP settings to allow email/password signup. Add `GEMINI_API_KEY` for AI features; configure the optional variables above only when using those integrations.
+4. If using Google sign-in, register `https://your-domain.example/api/auth/google/callback` with Google and set the corresponding Vercel OAuth variables. If cross-network calling matters, configure your own TURN relay and add `TURN_URLS` plus `TURN_SECRET`.
+5. Deploy from GitHub. Subsequent pushes to the connected production branch trigger new builds, subject to your Vercel project's deployment and verified-commit policies. Changes to environment variables require a new deployment to reach an existing production build.
+6. Check `/api/health`, then test signup/email delivery, login, a saved plan, a Gemini response, an upload, and calls with two accounts on separate networks. A successful build alone does not verify external services or WebRTC media.
+
+Do not expose database, Blob, SMTP, Gemini, OAuth, OTP, or TURN secrets in the repository. Vercel deployment protection may require authentication before the public site or API can be tested.
 
 ## Tests
+
+From the repository root, install the test dependencies and run the Python regression suite:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Tests create temporary databases and do not modify your real data. See `VERIFICATION.md` for conversion checks and remaining setup requirements.
+For frontend changes, also run `npm run build` from `frontend/`. Automated tests use temporary data and do not prove live SMTP delivery, Gemini access, Google OAuth, or cross-network call quality.
 
-## Hosting
-
-The provided `run.py` binds to your own computer only. For public deployment use a Python-capable host with persistent disk and HTTPS, configure `APP_ORIGIN`, set `ALLOW_LOCAL_DEV=false`, and keep the database/uploads on durable storage. Host multiple users against **one shared deployment** for community features; separate laptop databases do not synchronize. SQLite is intended for a single-server deployment, not replicas with independent disks.
-
-This package has **not replaced the existing `chatgpt.site` deployment**. Running Python requires a Python-capable host; the original Workers runtime is not used by this edition.
-
-Implementation references: [Starlette application documentation](https://www.starlette.io/applications/), [PyJWT validation API](https://pyjwt.readthedocs.io/en/stable/api.html).
-
-
-## Vercel deployment
-
-The Vercel build serves the React interface and Python API from one project. Configure Production environment variables for `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, `GEMINI_API_KEY`, `AUTH_OTP_SECRET`, and the `SMTP_*` mail settings before using live signup and AI features. A coturn-compatible relay can be added with `TURN_URLS` and `TURN_SECRET` for reliable calls across networks. Keep all secrets in Vercel, never in Git.
-
-The Vercel install step runs `npm ci` at the repository root and in `frontend/`, using both committed lockfiles.
