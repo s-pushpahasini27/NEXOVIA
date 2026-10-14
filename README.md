@@ -115,19 +115,6 @@ For local email verification, fill in the SMTP settings and restart the server. 
 
 AI answers and OCR can be inaccurate. Review important study content and schedules before relying on them.
 
-## Deployment on Vercel
-
-`vercel.json` installs dependencies with `npm ci` at the repository root and in `frontend/`, builds with `npm run build` in `frontend/`, and serves `frontend/dist`. The Python API is exposed through `api/index.py`; `api/blob-token.js` authorizes direct browser uploads. Both package lockfiles are committed, so Vercel can use the configured `npm ci` commands.
-
-1. Import this GitHub repository into a Vercel project and keep the repository's `vercel.json` build settings. Use a Python runtime supported by your Vercel project and Node.js **22.13+** for the build.
-2. Provide a PostgreSQL database and private Vercel Blob store. Set `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` in the Vercel project. Vercel's ephemeral filesystem is **not** a substitute for these persistent services.
-3. Set `APP_ORIGIN` to the exact HTTPS production origin, `ALLOW_LOCAL_DEV=false`, and a stable `AUTH_OTP_SECRET`. Add the SMTP settings to allow email/password signup. Add `GEMINI_API_KEY` for AI features; configure the optional variables above only when using those integrations.
-4. If using Google sign-in, register `https://your-domain.example/api/auth/google/callback` with Google and set the corresponding Vercel OAuth variables. If cross-network calling matters, configure your own TURN relay and add `TURN_URLS` plus `TURN_SECRET`.
-5. Deploy from GitHub. Subsequent pushes to the connected production branch trigger new builds, subject to your Vercel project's deployment and verified-commit policies. Changes to environment variables require a new deployment to reach an existing production build.
-6. Check `/api/health`, then test signup/email delivery, login, a saved plan, a Gemini response, an upload, and calls with two accounts on separate networks. A successful build alone does not verify external services or WebRTC media.
-
-Do not expose database, Blob, SMTP, Gemini, OAuth, OTP, or TURN secrets in the repository. Vercel deployment protection may require authentication before the public site or API can be tested.
-
 ## Tests
 
 From the repository root, install the test dependencies and run the Python regression suite:
