@@ -1,4 +1,5 @@
 """Apply the existing small SQLite schema to the connected Neon PostgreSQL database.
+The shared quota migration quotes "window" for PostgreSQL compatibility.
 
 The application keeps its local SQLite migrations intact.  Only SQLite's FTS5
 virtual table and implicit row id need PostgreSQL-specific equivalents.
