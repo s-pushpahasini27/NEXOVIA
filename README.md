@@ -1,6 +1,6 @@
 # Nexovia
 
-Nexovia is a study workspace for planning, learning, practicing, and tracking progress in one place. Its React interface is served by a Python ASGI application locally and deployed alongside the Python API on Vercel. The included `frontend/dist` build lets you run the app locally without installing Node.js; Node.js is needed only to change or rebuild the interface.
+Nexovia is a study workspace for planning, learning, practicing, and tracking progress in one place. Its React interface talks to a Python API. The included `frontend/dist` build lets you run the app locally without installing Node.js; Node.js is needed when changing or rebuilding the interface.
 
 ## Features
 
@@ -22,7 +22,7 @@ Gemini-backed features require a valid API key and model access; they do not sil
 - **Backend:** Python, Starlette ASGI, Uvicorn, and server-side Gemini REST requests.
 - **Data:** SQLite and private files in `data/` locally; PostgreSQL via `DATABASE_URL` and private Vercel Blob in the Vercel deployment.
 - **Integrations:** SMTP for email verification, optional Google OAuth, browser WebRTC for calls, and optional coturn-compatible TURN.
-- **Hosting:** Vercel serves `frontend/dist`, a Python API Function, and a Node upload-token Function.
+- **Hosted runtime:** Vercel serves the built frontend, a Python API Function, and a Node upload-token Function.
 
 ## Project structure
 
@@ -33,7 +33,7 @@ Gemini-backed features require a valid API key and model access; they do not sil
 │   ├── index.py              # Vercel Python API entry point
 │   └── blob-token.js         # Authenticated direct-upload tokens
 ├── backend/                  # API, auth, planner, AI, calls, storage, data
-│   └── migrations/           # Local SQLite schema migrations
+│   └── migrations/           # Database schema migrations
 ├── frontend/
 │   ├── src/                  # React and TypeScript source
 │   ├── dist/                 # Committed ready-to-run build
@@ -85,11 +85,11 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**. Vite proxies `/api` to the Python server at port 8000. To refresh the interface served by Python at port 8000, run `npm run build` from `frontend/`; source changes alone do not update the committed build. The default Google OAuth callback points to port 8000.
+Open **http://127.0.0.1:5173**. Vite proxies `/api` to the Python server at port 8000. To refresh the interface served by Python at port 8000, run `npm run build` from `frontend/`; source changes alone do not update the committed build. The public landing and authentication styles are in `frontend/src/app/landing.css` and `frontend/src/app/auth.css`. The default Google OAuth callback points to port 8000.
 
 ## Environment setup
 
-Copy `.env.example` to `.env` for local use. Keep `.env`, passwords, and API keys out of Git and frontend code. For Vercel, add the same server settings in **Project Settings → Environment Variables** instead of uploading a local `.env` file.
+Copy `.env.example` to `.env` for local use. Keep `.env`, passwords, and API keys out of Git and frontend code. For a hosted instance, set server variables through the hosting provider's secret settings.
 
 | Setting | Purpose |
 | --- | --- |
@@ -125,5 +125,3 @@ From the repository root, install the test dependencies and run the Python regre
 ```
 
 For frontend changes, also run `npm run build` from `frontend/`. Automated tests use temporary data and do not prove live SMTP delivery, Gemini access, Google OAuth, or cross-network call quality.
-
-The public landing and authentication layouts are maintained in `frontend/src/app/landing.css` and `frontend/src/app/auth.css`.
