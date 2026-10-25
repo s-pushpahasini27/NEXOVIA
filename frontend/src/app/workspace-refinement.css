@@ -102,18 +102,5 @@ html:root .all-tasks button:hover{background:var(--surface-alt)}
 html:root .all-tasks button b{color:var(--ink)}
 html:root .all-tasks button span:not(.subject-dot){color:var(--text-tertiary)}
 html:root .all-tasks button>svg{color:var(--primary)}
-/* A compact, centered authentication experience on top of the existing film. */
-html:root .auth-layout{width:min(1120px,calc(100% - 48px));min-height:min(790px,calc(100dvh - 60px));grid-template-columns:minmax(0,.88fr) minmax(0,1fr);margin:max(30px,calc((100dvh - 790px)/2)) auto;border:1px solid var(--line);border-radius:27px;overflow:hidden;background:var(--surface-glass);box-shadow:0 30px 100px #05040e42;backdrop-filter:blur(22px)}
-html:root .auth-story{padding:37px 40px;gap:35px;background:color-mix(in srgb,var(--accent-soft) 42%,transparent)}
-html:root .auth-story h1{font-size:clamp(38px,3.5vw,54px);line-height:1.1;letter-spacing:-.055em}
-html:root .auth-story>div{max-width:440px}
-html:root .auth-story>small{font-size:10px;letter-spacing:.02em}
-html:root .auth-main{padding:32px 44px;background:color-mix(in srgb,var(--card) 82%,transparent);backdrop-filter:none}
-html:root .auth-card{max-width:460px;padding:42px 0;margin:auto}
-html:root .auth-card h1{font-size:clamp(32px,3vw,40px);letter-spacing:-.045em}
-html:root .auth-card>p:not(.eyebrow){color:var(--text-secondary)}
-html:root .auth-card form>.primary{margin-top:10px}
-html:root .auth-session-note{color:var(--text-tertiary);background:var(--surface-alt);border:1px solid var(--line)}
-@media(max-width:850px){html:root .auth-layout{grid-template-columns:1fr;width:min(560px,calc(100% - 28px));min-height:0;margin:28px auto}html:root .auth-story{display:none}html:root .auth-main{min-height:calc(100dvh - 56px);padding:25px 30px}html:root .auth-card{padding:38px 0}}
-@media(max-width:520px){html:root .auth-layout{width:calc(100% - 16px);margin:8px auto;border-radius:19px}html:root .auth-main{min-height:calc(100dvh - 16px);padding:21px 20px}html:root .auth-card{padding:35px 0}html:root .auth-card h1{font-size:30px}}
+/* Authentication has its own page-scoped styles in auth.css. */
 @media(prefers-reduced-motion:reduce){html:root .assistant-studio .assistant-compose-form:before{animation:none}}

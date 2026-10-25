@@ -5,6 +5,7 @@ import {ArrowRight,ArrowLeft,Check,Eye,EyeOff,LockKeyhole,Loader2,Mail,ShieldChe
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import {ThemeToggle} from './theme-ui';
 import {ProfilePicturePicker,SkillPicker} from './profile-fields';
+import './auth.css';
 async function auth(action:string,data:any){const response=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const result:any=await response.json();if(!response.ok)throw Error(result.error||'Please try again.');return result;}
 function EmailVerification({email,resendAfter=60,onBack}:{email:string;resendAfter?:number;onBack:()=>void}) {
  const [code,setCode]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[remaining,setRemaining]=useState(resendAfter),[note,setNote]=useState('');
@@ -15,7 +16,55 @@ function EmailVerification({email,resendAfter=60,onBack}:{email:string;resendAft
 }
 function PasswordField({label,name,autoComplete='new-password'}:{label:string;name:string;autoComplete?:string}){const [visible,setVisible]=useState(false);return <label className="field"><span>{label}</span><div className="password-input"><input name={name} type={visible?'text':'password'} autoComplete={autoComplete} required minLength={autoComplete==='new-password'?12:undefined} maxLength={128}/><button type="button" aria-label={visible?'Hide password':'Show password'} aria-pressed={visible} onClick={()=>setVisible(!visible)}>{visible?<EyeOff size={17}/>:<Eye size={17}/>}</button></div></label>;}
 export function GoogleSignIn(){return <div className="google-signin"><span>OR CONTINUE WITH</span><a className="secondary google-button" href="/api/auth/google/start"><span className="google-mark" aria-hidden="true">G</span> Continue with Google</a></div>}
-export function AuthScreen({mode,suggestedEmail='',googleEnabled=false,pendingVerification=null}:{mode:'signup'|'login';suggestedEmail?:string;googleEnabled?:boolean;pendingVerification?:any}){const signup=mode==='signup';const [verification,setVerification]=useState<any>(pendingVerification);const [busy,setBusy]=useState(false),[error,setError]=useState('');useEffect(()=>{const message=new URLSearchParams(window.location.search).get('google_error');if(message)setError(message.slice(0,220));},[]);async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);setError('');try{const r=await auth(mode,Object.fromEntries(new FormData(e.currentTarget)));if(r.requiresVerification){setVerification(r);setBusy(false);}else window.location.assign(r.redirect);}catch(e:any){setError(e.message);setBusy(false);}}return <main className="auth-layout"><aside className="auth-story"><a href="/" className="public-brand"><span className="brand-icon"><BrandMark/></span>Nexovia</a><div><span className="eyebrow">YOUR NEXT CHAPTER</span><h1>A little clarity.<br/>A lot of possibility.</h1><p>A space for your subjects, your study rhythm, and everything you’re working towards.</p><div className="auth-story-steps"><span><Check size={15}/> Plans that fit your time</span><span><Check size={15}/> Focus, practice, and progress</span><span><Check size={15}/> Your work, saved for next time</span></div></div><small>Everything a student needs. Nothing a student doesn’t.</small></aside><section className="auth-main"><ThemeToggle/><a className="auth-back" href="/"><ArrowLeft size={15}/> Back to Nexovia</a><div className="auth-card"><span className="auth-symbol">{signup?<Sparkles size={25}/>:<LockKeyhole size={25}/>}</span><p className="eyebrow">{signup?'LET’S GET STARTED':'GOOD TO SEE YOU AGAIN'}</p><h1>{signup?'Make room for growth.':'Welcome back.'}</h1><p>{signup?'Create your account, then make your learning profile your own.':'Log in to pick up where you left off.'}</p><>{verification?<EmailVerification email={verification.email} resendAfter={verification.resendAfter} onBack={()=>setVerification(null)}/>:<form onSubmit={submit}><label className="field"><span>Email address</span><input name="email" type="email" autoComplete="email" required maxLength={254} defaultValue={suggestedEmail} placeholder="you@example.com"/></label>{signup&&suggestedEmail&&<p className="help"><ShieldCheck size={14}/> Use the email above to keep your existing Nexovia plans and progress.</p>}<PasswordField label="Password" name="password" autoComplete={signup?'new-password':'current-password'}/>{signup&&<><p className="password-help">Use at least 12 characters. A memorable phrase works well.</p><PasswordField label="Confirm password" name="confirmPassword"/></>}{error&&<p className="auth-error" role="alert">{error}</p>}<button className="primary" disabled={busy}>{busy?<Loader2 className="spin" size={17}/>:<ArrowRight size={17}/>} {signup?'Create account':'Log in'}</button></form>}</>{!verification&&googleEnabled&&<GoogleSignIn/>}<p className="auth-switch">{signup?'Already have an account?':'New to Nexovia?'} <a href={signup?'/login':'/signup'}>{signup?'Log in':'Create an account'}</a></p><div className="auth-session-note"><ShieldCheck size={15}/><span>Your session stays signed in for up to 30 days. Log out when using a shared device.</span></div></div></section></main>;}
+export function AuthScreen({mode,suggestedEmail='',googleEnabled=false,pendingVerification=null}:{mode:'signup'|'login';suggestedEmail?:string;googleEnabled?:boolean;pendingVerification?:any}){
+ const signup=mode==='signup';
+ const [verification,setVerification]=useState<any>(pendingVerification);
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{const message=new URLSearchParams(window.location.search).get('google_error');if(message)setError(message.slice(0,220));},[]);
+ async function submit(e:React.FormEvent<HTMLFormElement>){
+  e.preventDefault();setBusy(true);setError('');
+  try{const r=await auth(mode,Object.fromEntries(new FormData(e.currentTarget)));if(r.requiresVerification){setVerification(r);setBusy(false);}else window.location.assign(r.redirect);}
+  catch(e:any){setError(e.message);setBusy(false);}
+ }
+ return <main className={`auth-layout auth-layout--${mode}`}>
+  <aside className="auth-story">
+   <a href="/" className="public-brand"><span className="brand-icon"><BrandMark/></span>Nexovia</a>
+   <div className="auth-story-body">
+    <span className="eyebrow">A MORE INTENTIONAL WAY TO LEARN</span>
+    <h2>Make space for<br/><em>what matters.</em></h2>
+    <p>Plan your days, understand the difficult bits, and see how far you’ve come. All in one study space.</p>
+    <div className="auth-study-card" aria-label="A glimpse of your study space">
+     <div className="auth-study-top"><span>YOUR STUDY SPACE</span><span className="auth-study-spark"><Sparkles size={15}/></span></div>
+     <strong>One step at a time.</strong>
+     <div className="auth-study-row"><span className="auth-study-dot"/>A plan that fits your day <Check size={15}/></div>
+     <div className="auth-study-row"><span className="auth-study-dot"/>Answers when you need them <Check size={15}/></div>
+     <div className="auth-study-bottom"><span>PLAN</span><span className="auth-study-line"/><span>LEARN</span><span className="auth-study-line"/><span>GROW</span></div>
+    </div>
+   </div>
+   <small>YOUR WORK, YOUR PACE, YOUR NEXT CHAPTER <span>© NEXOVIA</span></small>
+  </aside>
+  <section className="auth-main">
+   <div className="auth-topline"><a href="/" className="public-brand auth-mobile-brand"><span className="brand-icon"><BrandMark/></span>Nexovia</a><a className="auth-back" href="/"><ArrowLeft size={15}/> Back to home</a><ThemeToggle/></div>
+   <div className="auth-card">
+    <div className="auth-form-heading"><span className="auth-symbol">{signup?<Sparkles size={22}/>:<LockKeyhole size={22}/>}</span><span className="eyebrow">{signup?'BEGIN YOUR NEXT CHAPTER':'WELCOME BACK TO NEXOVIA'}</span></div>
+    <h1>{verification?'Check your inbox.':signup?'Your space starts here.':'Good to have you back.'}</h1>
+    <p>{verification?'One quick step before you begin.':signup?'Create your account and build a study rhythm that feels like yours.':'Pick up your plans, notes, and progress right where you left them.'}</p>
+    {verification?<EmailVerification email={verification.email} resendAfter={verification.resendAfter} onBack={()=>setVerification(null)}/>:<form onSubmit={submit}>
+     <label className="field"><span>Email address</span><input name="email" type="email" autoComplete="email" required maxLength={254} defaultValue={suggestedEmail} placeholder="you@example.com"/></label>
+     {signup&&suggestedEmail&&<p className="help"><ShieldCheck size={14}/> Use the email above to keep your existing Nexovia plans and progress.</p>}
+     <PasswordField label="Password" name="password" autoComplete={signup?'new-password':'current-password'}/>
+     {signup&&<><p className="password-help">At least 12 characters. A memorable phrase works well.</p><PasswordField label="Confirm password" name="confirmPassword"/></>}
+     {error&&<p className="auth-error" role="alert">{error}</p>}
+     <button className="primary" disabled={busy}>{signup?'Create my account':'Continue to my workspace'} {busy?<Loader2 className="spin" size={17}/>:<ArrowRight size={17}/>}</button>
+    </form>}
+    {!verification&&googleEnabled&&<GoogleSignIn/>}
+    <p className="auth-switch">{signup?'Already have an account?':'New to Nexovia?'} <a href={signup?'/login':'/signup'}>{signup?'Log in':'Create an account'}</a></p>
+    <div className="auth-session-note"><ShieldCheck size={15}/><span>{signup?'Your study space is private by default. Make it yours at your own pace.':'Your session stays signed in for up to 30 days. Log out on shared devices.'}</span></div>
+   </div>
+   <span className="auth-main-foot">A LITTLE PROGRESS. EVERY DAY.</span>
+  </section>
+ </main>;
+}
 export function ProfileSetup({profile,userId}:any){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [subjects,setSubjects]=useState(profile?.subjects||'');
