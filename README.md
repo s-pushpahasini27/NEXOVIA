@@ -2,6 +2,8 @@
 
 **A connected workspace for planning, learning, and progress.**
 
+**Live application:** [nexovia-tau.vercel.app](https://nexovia-tau.vercel.app/)
+
 Nexovia is a full-stack study application that brings personalized schedules, AI tutoring, study resources, focused sessions, and practice into one place. It helps students organize what to study, work through difficult concepts, and track their learning over time.
 
 The application combines a React interface with a Python API. Study plans, tutor conversations, resources, practice results, and community activity are connected within each user's workspace.
