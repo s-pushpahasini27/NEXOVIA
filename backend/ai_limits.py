@@ -12,11 +12,11 @@ def reserve(db, user_id, units=1):
         raise RuntimeError('AI request limits must be positive integers.')
     # Claim both quotas together, and release the write lock before network I/O.
     db.execute('BEGIN IMMEDIATE')
-    db.execute('DELETE FROM ai_usage_limits WHERE window<?', (window,))
+    db.execute('DELETE FROM ai_usage_limits WHERE "window"<?', (window,))
     for scope, limit in [('global', global_limit), ('user:' + user_id, user_limit)]:
-        current = one(db, 'SELECT used FROM ai_usage_limits WHERE scope=? AND window=?', scope, window)
+        current = one(db, 'SELECT used FROM ai_usage_limits WHERE scope=? AND "window"=?', scope, window)
         if (current['used'] if current else 0) + units > limit:
             db.rollback()
             raise HTTPException(429, 'The hourly AI request limit has been reached. Try again next hour.')
-        db.execute('INSERT INTO ai_usage_limits VALUES(?,?,?) ON CONFLICT(scope,window) DO UPDATE SET used=used+excluded.used', (scope,window,units))
+        db.execute('INSERT INTO ai_usage_limits VALUES(?,?,?) ON CONFLICT(scope,"window") DO UPDATE SET used=used+excluded.used', (scope,window,units))
     db.commit()
