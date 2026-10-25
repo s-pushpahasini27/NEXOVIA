@@ -125,3 +125,4 @@ From the repository root, install the test dependencies and run the Python regre
 ```
 
 For frontend changes, also run `npm run build` from `frontend/`. Automated tests use temporary data and do not prove live SMTP delivery, Gemini access, Google OAuth, or cross-network call quality.
+On macOS or Linux, use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe` for the test commands.
